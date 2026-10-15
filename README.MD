@@ -141,7 +141,7 @@ const messageBus = new MessageBus({
 | Routing | Exchange | Persistent | Retried |
 |---|---|---|---|
 | `work` | default (direct), or `namespace` | yes | yes |
-| `work` + `ordered` | as `work`, queue with `x-single-active-consumer` | yes | yes, a redelivered copy is held until the original settles |
+| `work` + `ordered` | as `work`, queue with `x-single-active-consumer` | yes | yes |
 | `pubSub` | topic `namespace`, else `defaultTopicExchange` | no | no |
 
 Options: `maxAttempts` (default 5), `retryDelay` (backoff base in ms, default 1000, capped at
@@ -154,7 +154,8 @@ Semantics:
   `x-attempt` header, after an exponential backoff, and dropped once `maxAttempts` is reached.
   There is no dead-letter queue.
 - A redelivery (consumer crash, connection reset) of a message this consumer is still handling
-  is not run twice; one that is not in flight counts as a failed attempt. That guard is per
+  is not run twice (the copy is held until the original settles); one that is not in flight
+  counts as a failed attempt. That guard is per
   consumer — a redelivery that lands on another process runs again. **At-least-once**: a crash
   between the retry and the ack duplicates a message.
 - A message that is not JSON or not a bus payload is logged and dropped (acked).
