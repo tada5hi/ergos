@@ -27,7 +27,10 @@ export class Component<
 > implements IComponent<EventMap> {
     protected handlers = new Map<string, AnyHandler>();
 
-    protected initializePromise: Promise<void> | undefined;
+    /**
+     * initialize() runs per handler, so one mounted after the first call is still initialized.
+     */
+    protected initialized = new WeakMap<object, Promise<void>>();
 
     protected running = 0;
 
@@ -69,25 +72,31 @@ export class Component<
     }
 
     /**
-     * Run every handler's initialize() once. A failed attempt is forgotten,
-     * so the next call retries.
+     * Run each handler's initialize() once. A failed attempt is forgotten,
+     * so the next call retries it.
      */
     initialize(): Promise<void> {
-        if (!this.initializePromise) {
-            const promises = this.handlers.values().toArray().map((handler) => Promise.resolve()
-                .then(() => (typeof handler === 'function' ? undefined : handler.initialize?.())));
+        const promises = this.handlers.values().toArray().map((handler) => {
+            if (typeof handler === 'function' || !handler.initialize) {
+                return undefined;
+            }
 
-            const promise = Promise.all(promises).then(() => undefined);
-            promise.catch(() => {
-                if (this.initializePromise === promise) {
-                    this.initializePromise = undefined;
-                }
-            });
+            let promise = this.initialized.get(handler);
+            if (!promise) {
+                const run = Promise.resolve().then(() => handler.initialize?.());
+                run.catch(() => {
+                    if (this.initialized.get(handler) === run) {
+                        this.initialized.delete(handler);
+                    }
+                });
+                this.initialized.set(handler, run);
+                promise = run;
+            }
 
-            this.initializePromise = promise;
-        }
+            return promise;
+        });
 
-        return this.initializePromise;
+        return Promise.all(promises).then(() => undefined);
     }
 
     /**
