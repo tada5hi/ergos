@@ -152,7 +152,8 @@ Semantics:
 
 - A `work` handler that throws is re-published by amqp-extension with the attempt in the
   `x-attempt` header, after an exponential backoff, and dropped once `maxAttempts` is reached.
-  There is no dead-letter queue.
+  Each retry logs a warning and a drop an error naming the message's type and id. There is no
+  dead-letter queue.
 - A redelivery (consumer crash, connection reset) of a message this consumer is still handling
   is not run twice (the copy is held until the original settles); one that is not in flight
   counts as a failed attempt. That guard is per
