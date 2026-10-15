@@ -19,6 +19,10 @@
         ".": {
             "types": "./dist/index.d.mts",
             "import": "./dist/index.mjs"
+        },
+        "./amqp": {
+            "types": "./dist/amqp/index.d.mts",
+            "import": "./dist/amqp/index.mjs"
         }
     },
     "files": [
@@ -51,6 +55,7 @@
         "@tada5hi/eslint-config": "^2.3.1",
         "@tada5hi/tsconfig": "^0.7.2",
         "@vitest/coverage-v8": "^4.1.10",
+        "amqp-extension": "file:../amqp-extension-retry",
         "eslint": "^10.8.0",
         "husky": "^9.1.7",
         "tsdown": "^0.22.14",
@@ -60,5 +65,13 @@
     },
     "dependencies": {
         "node-cron": "^4.6.0"
+    },
+    "peerDependencies": {
+        "amqp-extension": "^5.1.0"
+    },
+    "peerDependenciesMeta": {
+        "amqp-extension": {
+            "optional": true
+        }
     }
 }

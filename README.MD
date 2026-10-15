@@ -115,6 +115,52 @@ Routing types: `work` (one consumer per message, round-robin) and `pubSub` (ever
 `MemoryMessageBusDriver` is in-process; `publish()` resolves `false` when no consumer matched.
 Delivery through a broker is at-least-once — handlers must be idempotent.
 
+### AMQP driver
+
+`ergos/amqp` maps the bus onto [amqp-extension](https://www.npmjs.com/package/amqp-extension)
+(an optional peer dependency, `^5.1.0`):
+
+```bash
+npm install ergos amqp-extension --save
+```
+
+```ts
+import { MessageBus } from 'ergos';
+import { AmqpMessageBusDriver } from 'ergos/amqp';
+
+const messageBus = new MessageBus({
+    driver: new AmqpMessageBusDriver({
+        connectionString: 'amqp://localhost',
+        defaultTopicExchange: 'app', // exchange of a pubSub routing without namespace
+        logger,
+    }),
+    logger,
+});
+```
+
+| Routing | Exchange | Persistent | Retried |
+|---|---|---|---|
+| `work` | default (direct), or `namespace` | yes | yes |
+| `work` + `ordered` | as `work`, queue with `x-single-active-consumer` | yes | yes, a redelivered copy is held until the original settles |
+| `pubSub` | topic `namespace`, else `defaultTopicExchange` | no | no |
+
+Options: `maxAttempts` (default 5), `retryDelay` (backoff base in ms, default 1000, capped at
+30s), `prefetchCount` (default 1), or `client` (an amqp-extension `Client`) in place of
+`connectionString`. The connection opens on first use; `close()` closes it.
+
+Semantics:
+
+- A `work` handler that throws is re-published by amqp-extension with the attempt in the
+  `x-attempt` header, after an exponential backoff, and dropped once `maxAttempts` is reached.
+  There is no dead-letter queue.
+- A redelivery (consumer crash, connection reset) of a message this consumer is still handling
+  is not run twice; one that is not in flight counts as a failed attempt. That guard is per
+  consumer — a redelivery that lands on another process runs again. **At-least-once**: a crash
+  between the retry and the ack duplicates a message.
+- A message that is not JSON or not a bus payload is logged and dropped (acked).
+- `pubSub` consumers use an exclusive temporary queue: messages published while none is
+  connected are lost.
+
 ## Contributing
 
 Before starting to work on a pull request, it is important to review the guidelines for
