@@ -51,5 +51,8 @@
         "typescript": "^6.0.3",
         "typescript-eslint": "^8.65.0",
         "vitest": "^4.1.10"
+    },
+    "dependencies": {
+        "node-cron": "^4.6.0"
     }
 }
