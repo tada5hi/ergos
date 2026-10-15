@@ -38,6 +38,14 @@ describe('src/message-bus', () => {
         });
     });
 
+    it('should default a timestamp passed as undefined', () => {
+        const payload = buildMessageBusPayload({
+            type: 'run',
+            metadata: { timestamp: undefined, routing: { type: 'work', key: 'q' } },
+        });
+        expect(payload.metadata.timestamp).toBeTypeOf('number');
+    });
+
     it('should reject malformed payloads', () => {
         expect(isMessageBusPayload(null)).toBe(false);
         expect(isMessageBusPayload({
