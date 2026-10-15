@@ -7,10 +7,15 @@ Single npm package — no workspaces, no monorepo tooling.
 ```
 ergos/
 ├── src/
-│   └── index.ts                     # Public entry point; everything exported here is public API
+│   ├── index.ts                     # Public entry point; everything exported here is public API
+│   ├── types.ts                     # ObjectLiteral, ILogger
+│   ├── component/                   # IComponent, Component, defineScheduledComponent
+│   ├── caller/                      # IComponentCaller + direct / dispatch / worker callers
+│   └── message-bus/                 # MessageBus, IMessageBusDriver, MemoryMessageBusDriver, helpers
 ├── test/
 │   ├── unit/
-│   │   └── index.spec.ts            # Unit specs (only files matched by the vitest include glob)
+│   │   ├── *.spec.ts                # One spec per module
+│   │   └── fakes/                   # Shared fakes (logger, test component)
 │   └── vitest.config.ts             # Vitest config — note: NOT in the project root
 ├── dist/                            # Build output (git-ignored, produced by tsdown)
 ├── .github/
@@ -38,27 +43,17 @@ ergos/
 
 ## Module Responsibilities
 
-| Module                   | Purpose                                                                                          |
-|--------------------------|--------------------------------------------------------------------------------------------------|
-| `src/index.ts`           | Sole entry point and barrel. Placeholder `add(a, b)` — replace with real code when using the template. |
-| `test/vitest.config.ts`  | Test include glob and v8 coverage thresholds. Referenced explicitly by the npm scripts.            |
-| `tsdown.config.ts`       | Bundles `src/index.ts` to ESM with declarations and sourcemaps.                                    |
+| Module                       | Purpose |
+|------------------------------|---------|
+| `src/component/module.ts`    | `Component`: key → handler map, `'*'` fallback, memoized `initialize()`, child events via `context.handle`, unhandled → `options.handle`, status of top-level calls |
+| `src/component/scheduled.ts` | `defineScheduledComponent`: first pass on start, node-cron schedule with `noOverlap`, failures logged, stop-during-start never schedules |
+| `src/caller/`                | `DirectComponentCaller` (in-process), `MessageBusDispatchComponentCaller` (publish a command), `MessageBusWorkerComponentCaller` (consume a routing, publish replies; itself an `IComponent`) |
+| `src/message-bus/`           | `MessageBus` facade (`$any` fallback), `IMessageBusDriver` / `IMessageBusConsumer`, `MemoryMessageBusDriver` (WORK round-robin, PUB_SUB fan-out, `cancel()` awaits in-flight handlers), payload helpers |
 
 ## Key Dependencies
 
-There are **no runtime dependencies** — the published package must stay dependency-free unless a downstream project deliberately adds one.
-
-| Dev dependency                | Role                                                                 |
-|-------------------------------|----------------------------------------------------------------------|
-| `tsdown`                      | Bundler; emits `dist/index.mjs`, `dist/index.d.mts`, and sourcemaps  |
-| `vitest`                      | Test runner                                                          |
-| `@vitest/coverage-v8`         | Coverage provider; required by `npm run test:coverage`               |
-| `typescript`                  | Type checking (`noEmit`) and declaration generation input            |
-| `eslint` + `typescript-eslint`| Linting                                                              |
-| `@tada5hi/eslint-config`      | Shared flat ESLint config                                            |
-| `@tada5hi/tsconfig`           | Shared base `tsconfig`                                               |
-| `@tada5hi/commitlint-config`  | Shared Conventional Commits rules                                    |
-| `husky`                       | Installs the git hooks path via the `prepare` script                 |
+- `node-cron` — the only runtime dependency (scheduled components).
+- An AMQP driver (`ergos/amqp`, on top of `amqp-extension`) is planned as a separate subpath with `amqp-extension` as an optional peer.
 
 ## Package Exports
 

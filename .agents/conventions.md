@@ -22,7 +22,8 @@ The three `@tada5hi/*` config packages are the source of truth for style, TS, an
 - `npm run lint:fix` auto-fixes most style violations — run it before hand-editing formatting.
 - Never edit `dist/` — it is generated and git-ignored.
 - Never hand-edit `.release-please-manifest.json` or the version in `package.json`; release-please owns both.
-- Keep the package **runtime-dependency-free**. New dependencies belong in `devDependencies` unless the library genuinely ships code that imports them.
+- `node-cron` is the only runtime dependency of the core entry. New dependencies belong in `devDependencies` (or an optional peer of a subpath) unless the core genuinely ships code that imports them.
+- Contracts carry an `I` prefix and live in `types.ts`; classes `implements` them. No `as any`; a cast only where nothing can check the type (the wire boundary in the worker caller).
 
 ## Code Style
 
@@ -117,5 +118,5 @@ This repository is a starting point, not a library. When bootstrapping a new pro
 
 - Use **ESM** and modern TypeScript/JavaScript; target ES2022 features freely.
 - Before adding new code, study the surrounding patterns, naming, and structure, and stay consistent with them.
-- Keep the template generic — resist project-specific abstractions, runtime dependencies, and extra tooling that every downstream consumer would inherit.
+- Resist hub- or authup-specific policy (DI modules, health aggregation, exchange names): it stays in the consuming app.
 - Prefer upgrading a shared `@tada5hi/*` config over adding a local rule override.

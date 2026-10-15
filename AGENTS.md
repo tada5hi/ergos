@@ -2,9 +2,11 @@
 
 # ergos — Agent Guide
 
-A minimal, opinionated scaffold for publishing ESM-only TypeScript libraries to npm. It is a **template repository**: new packages are created from it and then have their `src/` replaced with real code. The shipped `src/index.ts` (a single `add()` function) and its spec exist only to prove the toolchain works end to end — build, test, coverage, lint, release.
-
-Because this repository is consumed by copying, changes here propagate to every downstream project. Prefer changes that stay generic; resist adding domain-specific code, runtime dependencies, or opinionated abstractions.
+Components with a `start` / `stop` / `status` lifecycle and optional command handlers
+(`Component`, `IComponent`), cron-driven background jobs (`defineScheduledComponent`), and
+the message bus that routes commands and replies between components (`MessageBus`,
+`IMessageBusDriver`, `MemoryMessageBusDriver`, direct / dispatch / worker callers).
+Consumers: FLAME Hub and authup. ESM-only, one runtime dependency (`node-cron`).
 
 ## Quick Reference
 
