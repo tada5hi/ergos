@@ -40,6 +40,31 @@ describe('src/component/scheduled', () => {
         expect(passes).toBe(1);
     });
 
+    it('should not overlap passes when start() is called twice during the first pass', async () => {
+        const gate = Promise.withResolvers<void>();
+        let running = 0;
+        let maxRunning = 0;
+        let passes = 0;
+        const c = defineScheduledComponent({
+            schedule: '0 0 1 1 *',
+            run: async () => {
+                passes++;
+                running++;
+                maxRunning = Math.max(maxRunning, running);
+                await gate.promise;
+                running--;
+            },
+        });
+
+        const started = Promise.all([c.start(), c.start()]);
+        gate.resolve();
+        await started;
+
+        expect(passes).toBe(1);
+        expect(maxRunning).toBe(1);
+        await c.stop();
+    });
+
     it('should record a successful pass', async () => {
         const c = defineScheduledComponent({ schedule: '0 0 1 1 *', run: async () => {} });
         await c.start();
