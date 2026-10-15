@@ -1,4 +1,5 @@
-import { resolveAttempt } from 'amqp-extension';
+import { ClientError, resolveAttempt } from 'amqp-extension';
+import type { ConsumeMessage } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
 import { AmqpMessageBusDriver } from '../../src/amqp';
 import { buildMessageBusPayload } from '../../src';
@@ -39,6 +40,35 @@ function createDriver(client = new FakeAmqpClient(), logger?: FakeLogger) {
     });
 }
 
+function toConsumeMessage(type: string, messageId: string): ConsumeMessage {
+    return {
+        content: Buffer.from('{}'),
+        fields: {
+            deliveryTag: 1,
+            redelivered: false,
+            exchange: '',
+            routingKey: 'tasks',
+            consumerTag: 'c',
+        },
+        properties: {
+            contentType: undefined,
+            contentEncoding: undefined,
+            headers: undefined,
+            deliveryMode: 2,
+            priority: undefined,
+            correlationId: undefined,
+            replyTo: undefined,
+            expiration: undefined,
+            messageId,
+            timestamp: undefined,
+            type,
+            userId: undefined,
+            appId: undefined,
+            clusterId: undefined,
+        },
+    };
+}
+
 describe('src/amqp', () => {
     describe('wire compatibility with hub', () => {
         it.each(Object.keys(shapes) as (keyof typeof shapes)[])('should publish %s like hub', async (name) => {
@@ -65,10 +95,13 @@ describe('src/amqp', () => {
 
             // hub retried in the driver; the retry now lives in amqp-extension (WORK only)
             const isWork = routing.type === 'work';
-            expect(actual?.options).toEqual({
+            const { onError, ...options } = actual?.options ?? {};
+            expect(options).toEqual({
                 ...expected.options,
                 ...(isWork ? { retry } : {}),
             });
+            // logs retries and drops (hub's driver did)
+            expect(typeof onError).toBe(isWork ? 'function' : 'undefined');
         });
 
         // amqp-extension re-publishes the content verbatim with the attempt in its
@@ -105,6 +138,20 @@ describe('src/amqp', () => {
         await driver.consume(shapes.work, () => {});
 
         expect(client.consumes[0]?.options).toMatchObject({ prefetchCount: 4, retry: { maxAttempts: 3, delay: 10 } });
+    });
+
+    it('should log a retried WORK message and, at error level, a dropped one', async () => {
+        const client = new FakeAmqpClient();
+        const logger = new FakeLogger();
+        await createDriver(client, logger).consume(shapes.work, () => {});
+        const { onError } = client.consumes[0]?.options ?? {};
+        if (!onError) throw new Error('no onError');
+
+        await onError(new Error('boom'), toConsumeMessage('execute', 'msg-1'));
+        await onError(ClientError.attemptsExhausted('execute'), toConsumeMessage('execute', 'msg-1'));
+
+        expect(logger.messages('warn')).toEqual(['Retrying message execute (msg-1) in tasks.']);
+        expect(logger.messages('error')).toEqual(['Dropping message execute (msg-1) in tasks after 5 attempts.']);
     });
 
     it('should hand a parsed payload to the handler', async () => {

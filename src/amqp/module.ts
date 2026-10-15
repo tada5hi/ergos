@@ -1,4 +1,9 @@
-import { Client, ExchangeType } from 'amqp-extension';
+import {
+    Client,
+    ErrorCode,
+    ExchangeType,
+    isClientError,
+} from 'amqp-extension';
 import type { ConsumeOptions, QueueOptions } from 'amqp-extension';
 import {
     MessageBusRoutingType,
@@ -75,9 +80,18 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
             ...this.resolveQueueOptions(routing),
         };
         if (isWork) {
-            options.retry = {
-                maxAttempts: this.options.maxAttempts ?? 5,
-                delay: this.options.retryDelay ?? 1000,
+            const maxAttempts = this.options.maxAttempts ?? 5;
+            options.retry = { maxAttempts, delay: this.options.retryDelay ?? 1000 };
+            // amqp-extension does not log: the handler's own error is logged by MessageBus.
+            // ponytail: a crashed redelivery's retries are not reported by amqp-extension, only its drop.
+            options.onError = (error, input) => {
+                const { type, messageId } = input.properties;
+                if (isClientError(error) && error.code === ErrorCode.ATTEMPTS_EXHAUSTED) {
+                    this.logger?.error(`Dropping message ${type} (${messageId}) in ${routing.key} after ${maxAttempts} attempts.`);
+                    return;
+                }
+
+                this.logger?.warn(`Retrying message ${type} (${messageId}) in ${routing.key}.`);
             };
         }
 
