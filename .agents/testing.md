@@ -22,27 +22,15 @@ npx vitest --config test/vitest.config.ts --run test/unit/index.spec.ts   # sing
 
 ### Unit Tests
 
-`test/unit/` holds the only test layer. Specs import from the **source**, not from `dist/`:
+`test/unit/` holds the only test layer, one spec per module (`component`, `scheduled`,
+`message-bus`, `memory-driver`, `direct-caller`, `dispatch-caller`, `worker-caller`).
+Specs import from the **source** barrel (`'../../src'`), not from `dist/`.
 
-```typescript
-import { describe, expect, it } from 'vitest';
-import { add } from '../../src';
-
-describe('src/index.ts', () => {
-    it('should add numbers', () => {
-        const result = add(1, 2);
-        expect(result).toEqual(3);
-    });
-});
-```
-
-Conventions visible in the existing spec:
-
-- The top-level `describe` names the source file under test (`'src/index.ts'`).
-- `it` titles read as `should ...`.
-- Import through the barrel (`'../../src'`) rather than deep paths, so tests exercise the public surface.
-
-There are no integration tests, no fixtures, and no test helpers. If a downstream project needs them, add a sibling directory (e.g. `test/integration/`) **and** widen the `include` glob in `test/vitest.config.ts` — otherwise the new tests are silently skipped.
+- **Fakes, never `vi.fn()` / `vi.mock()`.** Shared fakes live in `test/unit/fakes/`
+  (`FakeLogger` recording calls, `TestComponent`). The memory driver is the bus in caller specs.
+- Concurrency is pinned with `Promise.withResolvers()` deferreds where possible.
+  `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
+- `tsconfig.json` includes `src/` only; type-check specs with a tsconfig that also includes `test/`.
 
 ## Testing Philosophy
 
