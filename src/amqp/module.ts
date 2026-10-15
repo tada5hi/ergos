@@ -80,9 +80,6 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
                 delay: this.options.retryDelay ?? 1000,
             };
         }
-        if (routing.ordered) {
-            options.ordered = true;
-        }
 
         return this.resolveExchange(routing).consume(routing.key, options, {
             $any: async (input) => {

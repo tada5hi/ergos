@@ -1,5 +1,4 @@
-import type { ConsumeMessage } from 'amqp-extension';
-import { ATTEMPT_HEADER, retryMessage } from 'amqp-extension';
+import { resolveAttempt } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
 import { AmqpMessageBusDriver } from '../../src/amqp';
 import { buildMessageBusPayload } from '../../src';
@@ -40,35 +39,6 @@ function createDriver(client = new FakeAmqpClient(), logger?: FakeLogger) {
     });
 }
 
-function toConsumeMessage(body: string, headers?: Record<string, unknown>): ConsumeMessage {
-    return {
-        content: Buffer.from(body),
-        fields: {
-            deliveryTag: 1, 
-            redelivered: false, 
-            exchange: '', 
-            routingKey: 'tasks', 
-            consumerTag: 'c', 
-        },
-        properties: {
-            contentType: undefined,
-            contentEncoding: undefined,
-            headers,
-            deliveryMode: 2,
-            priority: undefined,
-            correlationId: undefined,
-            replyTo: undefined,
-            expiration: undefined,
-            messageId: 'msg-1',
-            timestamp: undefined,
-            type: 'execute',
-            userId: undefined,
-            appId: undefined,
-            clusterId: undefined,
-        },
-    };
-}
-
 describe('src/amqp', () => {
     describe('wire compatibility with hub', () => {
         it.each(Object.keys(shapes) as (keyof typeof shapes)[])('should publish %s like hub', async (name) => {
@@ -95,32 +65,30 @@ describe('src/amqp', () => {
 
             // hub retried in the driver; the retry now lives in amqp-extension (WORK only)
             const isWork = routing.type === 'work';
-            const ordered = 'ordered' in routing && routing.ordered;
             expect(actual?.options).toEqual({
                 ...expected.options,
                 ...(isWork ? { retry } : {}),
-                ...(ordered ? { ordered: true } : {}),
             });
         });
 
-        it('should move only the retry counter from the body into the x-attempt header', async () => {
+        // amqp-extension re-publishes the content verbatim with the attempt in its
+        // x-attempt header (pinned by its own retry spec), so only the body is pinned here.
+        it('should move only the retry counter out of the body', async () => {
             const client = new FakeAmqpClient();
             await createDriver(client).publish(shapes.work, message(shapes.work));
             const [published] = client.publishes;
             if (!published) throw new Error('nothing published');
-
-            const republished: { content: Buffer, headers: unknown }[] = [];
-            await retryMessage(toConsumeMessage(published.body), async (content, options) => {
-                republished.push({ content, headers: options.headers });
-            }, { delay: 0 });
 
             const [hubRetry] = hubWireFixture.workRetry;
             const hubBody: MessageBusPayload & { metadata: { attempt?: number } } = JSON.parse(hubRetry.body);
             expect(hubBody.metadata.attempt).toBe(2);
             delete hubBody.metadata.attempt;
 
-            expect(JSON.parse(republished[0]?.content.toString() ?? '')).toEqual(hubBody);
-            expect(republished[0]?.headers).toEqual({ [ATTEMPT_HEADER]: 2 });
+            expect(JSON.parse(published.body)).toEqual(hubBody);
+        });
+
+        it('should count a message retried by hub (attempt in the body) as attempt 1, never dropping it early', () => {
+            expect(resolveAttempt({ headers: undefined })).toBe(1);
         });
     });
 
