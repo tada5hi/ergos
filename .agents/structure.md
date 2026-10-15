@@ -11,11 +11,13 @@ ergos/
 │   ├── types.ts                     # ObjectLiteral, ILogger
 │   ├── component/                   # IComponent, Component, defineScheduledComponent
 │   ├── caller/                      # IComponentCaller + direct / dispatch / worker callers
-│   └── message-bus/                 # MessageBus, IMessageBusDriver, MemoryMessageBusDriver, helpers
+│   ├── message-bus/                 # MessageBus, IMessageBusDriver, MemoryMessageBusDriver, helpers
+│   └── amqp/                        # subpath ergos/amqp: AmqpMessageBusDriver, IAmqpClient
 ├── test/
 │   ├── unit/
 │   │   ├── *.spec.ts                # One spec per module
-│   │   └── fakes/                   # Shared fakes (logger, test component)
+│   │   ├── fakes/                   # Shared fakes (logger, test component, amqp client)
+│   │   └── fixtures/hub-wire.ts     # Wire tuples captured from hub's former driver
 │   └── vitest.config.ts             # Vitest config — note: NOT in the project root
 ├── dist/                            # Build output (git-ignored, produced by tsdown)
 ├── .github/
@@ -49,11 +51,13 @@ ergos/
 | `src/component/scheduled.ts` | `defineScheduledComponent`: first pass on start, node-cron schedule with `noOverlap`, failures logged, stop-during-start never schedules |
 | `src/caller/`                | `DirectComponentCaller` (in-process), `MessageBusDispatchComponentCaller` (publish a command), `MessageBusWorkerComponentCaller` (consume a routing, publish replies; itself an `IComponent`) |
 | `src/message-bus/`           | `MessageBus` facade (`$any` fallback), `IMessageBusDriver` / `IMessageBusConsumer`, `MemoryMessageBusDriver` (WORK round-robin, PUB_SUB fan-out, `cancel()` awaits in-flight handlers), payload helpers |
+| `src/amqp/`                  | `AmqpMessageBusDriver`: routing → exchange/queue options, publish properties, parse + guard; retry and the redelivery guard are amqp-extension's (`retry`, `ordered` consume options) |
 
 ## Key Dependencies
 
 - `node-cron` — the only runtime dependency (scheduled components).
-- An AMQP driver (`ergos/amqp`, on top of `amqp-extension`) is planned as a separate subpath with `amqp-extension` as an optional peer.
+- `amqp-extension` — optional peer (`^5.1.0`) of the `ergos/amqp` subpath only; the core entry never imports it.
+  Until 5.1.0 is released the devDependency is a local `file:../amqp-extension-retry` link.
 
 ## Package Exports
 
@@ -66,6 +70,10 @@ ergos/
         ".": {
             "types": "./dist/index.d.mts",
             "import": "./dist/index.mjs"
+        },
+        "./amqp": {
+            "types": "./dist/amqp/index.d.mts",
+            "import": "./dist/amqp/index.mjs"
         }
     },
     "files": ["dist"]

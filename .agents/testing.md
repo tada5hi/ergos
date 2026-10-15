@@ -23,13 +23,17 @@ npx vitest --config test/vitest.config.ts --run test/unit/index.spec.ts   # sing
 ### Unit Tests
 
 `test/unit/` holds the only test layer, one spec per module (`component`, `scheduled`,
-`message-bus`, `memory-driver`, `direct-caller`, `dispatch-caller`, `worker-caller`).
+`message-bus`, `memory-driver`, `direct-caller`, `dispatch-caller`, `worker-caller`, `amqp-driver`).
 Specs import from the **source** barrel (`'../../src'`), not from `dist/`.
 
 - **Fakes, never `vi.fn()` / `vi.mock()`.** Shared fakes live in `test/unit/fakes/`
   (`FakeLogger` recording calls, `TestComponent`). The memory driver is the bus in caller specs.
 - Concurrency is pinned with `Promise.withResolvers()` deferreds where possible.
   `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
+- `amqp-driver.spec.ts` runs against `FakeAmqpClient` (no broker) and compares every routing
+  shape with `fixtures/hub-wire.ts`, captured from hub's former driver. The only allowed
+  difference is the retry counter (body `metadata.attempt` → `x-attempt` header). Never
+  regenerate the fixture from this driver — that would make the comparison vacuous.
 - `tsconfig.json` includes `src/` only; type-check specs with a tsconfig that also includes `test/`.
 
 ## Testing Philosophy
