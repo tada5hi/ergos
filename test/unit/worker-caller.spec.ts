@@ -51,6 +51,28 @@ describe('src/caller/worker', () => {
         expect(component.lifecycle).toEqual(['start']);
     });
 
+    it('should not leak the command\'s retry counter into its reply', async () => {
+        const {
+            messageBus,
+            component,
+            dispatcher,
+        } = setup();
+        const replies: MessageBusPayload[] = [];
+        await messageBus.consumeAny(publishRouting, (payload) => { replies.push(payload); });
+
+        const worker = new MessageBusWorkerComponentCaller(component, {
+            consumeRouting,
+            publishRouting,
+            messageBus,
+        });
+        await worker.start();
+        // an older producer counts attempts in the body
+        await dispatcher.call('execute', { id: 'a' }, { attempt: 5, correlationId: 'c' });
+
+        expect(replies[0]?.metadata).toMatchObject({ correlationId: 'c' });
+        expect(replies[0]?.metadata).not.toHaveProperty('attempt');
+    });
+
     it('should warn when a child event has nowhere to go', async () => {
         const {
             messageBus, 
