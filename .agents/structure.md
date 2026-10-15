@@ -57,7 +57,6 @@ ergos/
 
 - `node-cron` — the only runtime dependency (scheduled components).
 - `amqp-extension` — optional peer (`^5.1.0`) of the `ergos/amqp` subpath only; the core entry never imports it.
-  Until 5.1.0 is released the devDependency is a local `file:../amqp-extension-retry` link.
 
 ## Package Exports
 
