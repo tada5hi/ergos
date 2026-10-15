@@ -97,9 +97,12 @@ export class MessageBusWorkerComponentCaller<
                 }
 
                 // an older producer's retry counter (body metadata.attempt) must not leak into the reply,
-                // or an older consumer drops the reply early
+                // or an older consumer drops the reply early; the reply gets its own timestamp and
+                // the persistence of its own routing, not the command's
                 const metadata = { ...childContext.metadata };
                 delete metadata.attempt;
+                delete metadata.timestamp;
+                delete metadata.persistent;
                 await messageBus.publish(buildMessageBusPayload({
                     type: childContext.key,
                     data: childData,
