@@ -73,6 +73,31 @@ describe('src/caller/worker', () => {
         expect(replies[0]?.metadata).not.toHaveProperty('attempt');
     });
 
+    it('should stamp a reply with its own timestamp, not the command\'s transport metadata', async () => {
+        const {
+            messageBus,
+            component,
+            dispatcher,
+        } = setup();
+        const replies: MessageBusPayload[] = [];
+        await messageBus.consumeAny(publishRouting, (payload) => { replies.push(payload); });
+
+        const worker = new MessageBusWorkerComponentCaller(component, {
+            consumeRouting,
+            publishRouting,
+            messageBus,
+        });
+        await worker.start();
+        await dispatcher.call('execute', { id: 'a' }, {
+            correlationId: 'c', 
+            timestamp: 1, 
+            persistent: false, 
+        });
+
+        expect(replies[0]?.metadata.timestamp).toBeGreaterThan(1);
+        expect(replies[0]?.metadata).not.toHaveProperty('persistent');
+    });
+
     it('should warn when a child event has nowhere to go', async () => {
         const {
             messageBus, 
