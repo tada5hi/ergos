@@ -109,7 +109,7 @@ This repository is a starting point, not a library. When bootstrapping a new pro
 
 1. Replace `name`, `description`, `keywords`, and repository URLs in `package.json`.
 2. Replace `src/index.ts` and `test/unit/index.spec.ts` with real code.
-3. Update `README.MD` — the badge URLs all embed `typescript-template` and the Codecov token.
+3. Update `README.MD` — the badge URLs all embed `ergos` and the Codecov token.
 4. Reset `.release-please-manifest.json` to `0.0.0` if it has drifted.
 5. Update `AGENTS.md` and `.agents/*.md` to describe the new project.
 
