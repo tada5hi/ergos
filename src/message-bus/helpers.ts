@@ -6,13 +6,16 @@ function isObject(input: unknown): input is ObjectLiteral {
 }
 
 export function buildMessageBusPayload(input: MessageBusPayloadInput): MessageBusPayload {
+    // timestamp stays the first key: the JSON body must match hub's byte for byte
+    const { timestamp, ...metadata } = input.metadata;
+
     return {
         id: input.id || crypto.randomUUID(),
         type: input.type,
         data: input.data || {},
         metadata: {
-            timestamp: Date.now(),
-            ...input.metadata,
+            timestamp: timestamp ?? Date.now(),
+            ...metadata,
         },
     };
 }
