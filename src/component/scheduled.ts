@@ -14,8 +14,11 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IC
     let generation = 0;
     let lastSuccessAt: number | undefined;
     let runningSince: number | undefined;
+    // the pass in flight: a start() during it (a second start(), or one after a stop())
+    // joins it instead of running a second pass next to it
+    let pass: Promise<void> | undefined;
 
-    const execute = async () => {
+    const run = async () => {
         runningSince = Date.now();
         try {
             await options.run();
@@ -26,6 +29,12 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IC
         } finally {
             runningSince = undefined;
         }
+    };
+
+    const execute = () => {
+        // cleared asynchronously: a run() that throws synchronously must not leave a settled pass behind
+        pass ??= run().finally(() => { pass = undefined; });
+        return pass;
     };
 
     return {
