@@ -1,4 +1,4 @@
-import type { ObjectLiteral } from '../types';
+import type { ILogger, ObjectLiteral } from '../types';
 
 export type ComponentMetadata = {
     correlationId?: string,
@@ -59,3 +59,20 @@ export interface IComponent<EventMap extends ComponentEventMap = ComponentEventM
         options?: ComponentHandleOptions<EventMap>,
     ): Promise<void>;
 }
+
+export type ScheduledComponentOptions = {
+    /**
+     * node-cron expression
+     */
+    schedule: string,
+    run: () => Promise<void>,
+    /**
+     * Run one pass in start() before scheduling. Default: true
+     */
+    runOnStart?: boolean,
+    logger?: ILogger,
+    /**
+     * For log lines.
+     */
+    name?: string,
+};
