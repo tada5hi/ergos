@@ -1,18 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defineScheduledComponent } from '../../src';
-import type { ILogger } from '../../src';
-
-class FakeLogger implements ILogger {
-    calls: { level: string, message: unknown }[] = [];
-
-    debug(message: unknown) { this.calls.push({ level: 'debug', message }); }
-
-    info(message: unknown) { this.calls.push({ level: 'info', message }); }
-
-    warn(message: unknown) { this.calls.push({ level: 'warn', message }); }
-
-    error(message: unknown) { this.calls.push({ level: 'error', message }); }
-}
+import { FakeLogger } from './fakes/logger';
 
 const wait = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
