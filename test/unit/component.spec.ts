@@ -93,6 +93,17 @@ describe('src/component', () => {
         expect(calls).toBe(1);
     });
 
+    it('should initialize a handler mounted after the first call', async () => {
+        const calls: string[] = [];
+        const component = new Component<{ a: [{}, {}], b: [{}, {}] }>();
+        component.mount('a', { initialize: () => { calls.push('a'); }, handle: () => {} });
+        await component.handle('a', {});
+        component.mount('b', { initialize: () => { calls.push('b'); }, handle: () => {} });
+        await component.handle('b', {});
+        await component.handle('a', {});
+        expect(calls).toEqual(['a', 'b']);
+    });
+
     it('should retry initialize after a failed attempt', async () => {
         let calls = 0;
         const component = new Component<{ run: Ev }>();
