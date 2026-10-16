@@ -61,6 +61,26 @@ export interface IComponent<EventMap extends ComponentEventMap = ComponentEventM
 }
 
 /**
+ * A component that can be called: an IComponent whose handle is not optional.
+ * Component satisfies it.
+ */
+export interface ICallable<EventMap extends ComponentEventMap = ComponentEventMap> extends IComponent<EventMap> {
+    handle: NonNullable<IComponent<EventMap>['handle']>;
+}
+
+/**
+ * One event a component did not handle — a child event (a reply) or an
+ * unknown top-level command — typed by key.
+ */
+export type ForwardedEvent<EventMap extends ComponentEventMap = ComponentEventMap> = {
+    [K in keyof EventMap & string]: {
+        key: K,
+        data: EventMap[K][0],
+        metadata: EventMap[K][1]
+    }
+}[keyof EventMap & string];
+
+/**
  * Observers; a hook that throws is ignored (see invokeHook).
  */
 export type ScheduledComponentHooks = {
