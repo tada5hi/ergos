@@ -1,4 +1,5 @@
 import type { ComponentEventMap, ForwardedEvent, ICallable } from '../component';
+import type { IMessageBus, Message, MessageRouting } from '../message-bus';
 
 export type DispatchResult = {
     correlationId: string,
@@ -28,4 +29,20 @@ export type LocalDispatchResult<EventMap extends ComponentEventMap = ComponentEv
      * The forwarded events, in emission order.
      */
     replies: ForwardedEvent<EventMap>[],
+};
+
+/**
+ * Observers; a hook that throws is ignored (see invokeHook).
+ */
+export type RemoteDispatcherHooks = {
+    /**
+     * The bus resolved false: no consumer accepted the command (memory driver).
+     */
+    onUndelivered?(message: Message): void,
+};
+
+export type RemoteDispatcherOptions = {
+    messageBus: IMessageBus,
+    routing: MessageRouting,
+    hooks?: RemoteDispatcherHooks,
 };
