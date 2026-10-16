@@ -1,6 +1,6 @@
 {
     "name": "synergos",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "type": "module",
     "description": "Components with a start/stop/status lifecycle, optional command handlers, scheduled jobs and the message bus that routes commands between them.",
     "author": {
