@@ -162,7 +162,7 @@ if (!result.delivered) await local.dispatch('build', data);
 
 - `start()`: `component.start()`, then `messageBus.consumeAny(consume, …)`. Each message is decoded
   by `fromMessage` and passed to `component.handle` with a `handle` option that publishes each
-  forwarded event as `toMessage(event…, reply)`, or — no `reply` — reports it to `onUnrouted`
+  forwarded event as `toForwardedMessage(event, reply)`, or — no `reply` — reports it to `onUnrouted`
   and drops it.
 - Publishing a forwarded event that resolves `false` (no consumer, memory driver) →
   `onUndelivered(message)`. The command still settles normally (acked): a retry would re-run the
@@ -187,7 +187,7 @@ if (!result.delivered) await local.dispatch('build', data);
 
 ### Lifecycle helper (internal)
 
-`lifecycle({ acquire, release })` → `{ start, stop }` implementing the guarantees above. Used by
+`createLifecycle(acquire)` (acquire returns its release) → `{ start, stop }` implementing the guarantees above. Used by
 `RemoteWorker` and `defineScheduledComponent`, whose `generation` counter it replaces.
 `defineScheduledComponent` keeps every documented behaviour (first pass on start, `noOverlap`,
 failed pass → `onError`, stop-during-start never schedules), with one change: `stop()` now waits
