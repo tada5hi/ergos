@@ -5,7 +5,7 @@
 - **Runner**: [Vitest](https://vitest.dev)
 - **Test location**: per package, `packages/<pkg>/test/unit/**/*.{test,spec}.{js,ts}` — files outside this glob are **not** picked up
 - **Config**: `packages/<pkg>/test/vitest.config.ts` (the npm scripts pass `--config` explicitly).
-  `ergos-amqp`'s config aliases `ergos` to `../ergos/src`, so its tests need no prior build.
+  `@synergos/amqp`'s config aliases `synergos` to `../synergos/src`, so its tests need no prior build.
 - **Prerequisite**: `npm ci`. No database, container, or external service is required.
 
 ## Running Tests
@@ -14,8 +14,8 @@
 npm run test                                  # every package (nx run-many), once
 npm run test:coverage                         # every package, with coverage
 npm run typecheck                             # tsc --noEmit over src + test, every package
-npm run test -w packages/ergos                # one package
-cd packages/ergos && npx vitest --config test/vitest.config.ts --run test/unit/hook.spec.ts   # single file
+npm run test -w packages/synergos                # one package
+cd packages/synergos && npx vitest --config test/vitest.config.ts --run test/unit/hook.spec.ts   # single file
 ```
 
 The per-package `test` scripts pass `--run`, so they never enter watch mode — safe for CI and for agents.
@@ -24,10 +24,10 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
 
 ### Unit Tests
 
-`test/unit/` holds the only test layer, one spec per module — ergos: `component`, `scheduled`,
+`test/unit/` holds the only test layer, one spec per module — synergos: `component`, `scheduled`,
 `hook`, `message-bus`, `memory-driver`, `direct-caller`, `dispatch-caller`, `worker-caller`;
-ergos-amqp: `driver`. Specs import the package under test from its **source** barrel
-(`'../../src'`), not from `dist/`; amqp specs import `ergos` by name (aliased to source).
+@synergos/amqp: `driver`. Specs import the package under test from its **source** barrel
+(`'../../src'`), not from `dist/`; amqp specs import `synergos` by name (aliased to source).
 
 - **Fakes, never `vi.fn()` / `vi.mock()`.** Shared fakes live in `test/unit/fakes/`
   (`TestComponent`, `FakeMessageBus` implementing `IMessageBus`, `FakeAmqpClient`). The memory
@@ -37,7 +37,7 @@ ergos-amqp: `driver`. Specs import the package under test from its **source** ba
   the outcome unchanged (resolve vs. reject, ack vs. retry).
 - Concurrency is pinned with `Promise.withResolvers()` deferreds where possible.
   `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
-- `driver.spec.ts` (ergos-amqp) runs against `FakeAmqpClient` (no broker) and compares every routing
+- `driver.spec.ts` (@synergos/amqp) runs against `FakeAmqpClient` (no broker) and compares every routing
   shape with `fixtures/hub-wire.ts`, captured from hub's former driver. The only allowed
   difference is the retry counter (body `metadata.attempt` → `x-attempt` header). Never
   regenerate the fixture from this driver — that would make the comparison vacuous.

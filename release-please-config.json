@@ -2,8 +2,8 @@
     "release-type": "node",
     "bump-minor-pre-major": true,
     "packages": {
-        "packages/ergos": {"component": "ergos"},
-        "packages/amqp": {"component": "ergos-amqp"}
+        "packages/synergos": {"component": "synergos"},
+        "packages/amqp": {"component": "amqp"}
     },
     "plugins": [
         {

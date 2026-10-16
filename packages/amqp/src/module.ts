@@ -11,14 +11,14 @@ import {
     invokeHook,
     isMessage,
     serializeMessage,
-} from 'ergos';
+} from 'synergos';
 import type {
     IMessageBusConsumer,
     IMessageBusDriver,
     Message,
     MessageHandler,
     MessageRouting,
-} from 'ergos';
+} from 'synergos';
 import type {
     AmqpMessageBusDriverHooks,
     AmqpMessageBusDriverOptions,

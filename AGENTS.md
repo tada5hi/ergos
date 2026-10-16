@@ -1,17 +1,17 @@
 <!-- NOTE: Keep this file and all corresponding files in the .agents directory updated as the project evolves. When making architectural changes, adding new patterns, or discovering important conventions, update the relevant sections. -->
 
-# ergos — Agent Guide
+# synergos — Agent Guide
 
 An npm workspaces monorepo with two packages:
 
-- **`ergos`** (`packages/ergos`) — components with a `start` / `stop` / `status` lifecycle and
+- **`synergos`** (`packages/synergos`) — components with a `start` / `stop` / `status` lifecycle and
   optional command handlers (`Component`, `IComponent`), cron-driven background jobs
   (`defineScheduledComponent`), and the message bus that routes commands and replies between
   components (`IMessageBus` / `MessageBus`, `IMessageBusDriver`, `MemoryMessageBusDriver`,
   `DirectCaller` / `DispatchCaller` / `WorkerCaller`). One runtime dependency (`node-cron`).
-- **`ergos-amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
+- **`@synergos/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
   [amqp-extension](https://www.npmjs.com/package/amqp-extension) (a real dependency);
-  `ergos` is a peer.
+  `synergos` is a peer.
 
 Consumers: FLAME Hub and authup. ESM-only. Observability is through typed `hooks` options,
 not a logger.
