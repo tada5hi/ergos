@@ -90,6 +90,25 @@ export function defineDriverConformance(
             assert.deepEqual(received.map((item) => item.id).sort(), published.map((item) => item.id).sort());
         });
 
+        run('should keep WORK routings with the same key apart by namespace', async (driver) => {
+            const plain = routing('work');
+            const namespaced: MessageRouting = { ...plain, namespace: 'conformance' };
+            const a = collect(2);
+            const b = collect(2);
+            await driver.consume(plain, a.handler);
+            await driver.consume(namespaced, b.handler);
+
+            const published = [message(plain), message(plain), message(namespaced), message(namespaced)];
+            for (const item of published) {
+                await driver.publish(item.metadata.routing, item);
+            }
+
+            const [fromA, fromB] = await Promise.all([a.done, b.done]);
+            await tick();
+            assert.deepEqual(fromA.map((item) => item.id), published.slice(0, 2).map((item) => item.id));
+            assert.deepEqual(fromB.map((item) => item.id), published.slice(2).map((item) => item.id));
+        });
+
         run('should fan a PUB_SUB message out to every consumer', async (driver) => {
             const to = routing('pubSub');
             const a = collect(1);

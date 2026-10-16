@@ -186,33 +186,46 @@ describe('src/module', () => {
         expect(seen[0]?.metadata.delivery).toEqual({ attempt: 2, maxAttempts: 3 });
     });
 
-    it('should consume a namespaced WORK routing through a topic exchange into the shared, retried queue `key`', async () => {
+    it('should map a namespaced WORK routing onto the durable queue `namespace/key` of the default exchange', async () => {
         const client = new FakeAmqpClient();
         const routing: MessageRouting = { ...shapes.work, namespace: 'custom' };
 
         await createDriver(client).consume(routing, () => {});
+        // the publisher declares the queue too, so a message published before any consumer is kept
         await createDriver(client).publish(routing, message(routing));
 
         const [consumed] = client.consumes;
-        expect(consumed?.exchange).toEqual({ type: 'topic', name: 'custom' });
-        expect(consumed?.key).toBe('tasks');
+        expect(consumed?.exchange).toEqual({ type: 'direct', name: '' });
+        expect(consumed?.key).toBe('custom/tasks');
         const { onError, ...options } = consumed?.options ?? {};
         expect(options).toEqual({
             prefetchCount: 1,
             requeueOnFailure: true,
-            queue: 'tasks',
             retry,
         });
         expect(typeof onError).toBe('function');
 
         const [published] = client.publishes;
-        expect(published?.exchange).toEqual({ type: 'topic', name: 'custom' });
-        expect(published?.key).toBe('tasks');
+        expect(published?.exchange).toEqual({ type: 'direct', name: '' });
+        expect(published?.key).toBe('custom/tasks');
         expect(published?.options).toEqual({
             type: 'execute',
             messageId: 'msg-1',
             persistent: true,
         });
+    });
+
+    it('should declare an ordered namespaced WORK queue single-active on publish and consume', async () => {
+        const client = new FakeAmqpClient();
+        const routing: MessageRouting = { ...shapes.workOrdered, namespace: 'custom' };
+
+        await createDriver(client).consume(routing, () => {});
+        await createDriver(client).publish(routing, message(routing));
+
+        expect(client.consumes[0]?.key).toBe('custom/replies');
+        expect(client.consumes[0]?.options.singleActiveConsumer).toBe(true);
+        expect(client.publishes[0]?.key).toBe('custom/replies');
+        expect(client.publishes[0]?.options.singleActiveConsumer).toBe(true);
     });
 
     it('should report a retried WORK message to onRetry and a dropped one to onDrop', async () => {

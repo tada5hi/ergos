@@ -228,7 +228,7 @@ dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_
 |---|---|
 | `type` | `'work'`: each message goes to one consumer (round-robin), also with a `namespace`. `'pubSub'`: each message goes to every consumer |
 | `key` | The queue (work) or routing key (pubSub) |
-| `namespace` | Optional. Separates routings with the same key, e.g. an exchange name in the amqp driver |
+| `namespace` | Optional. Separates routings with the same key; the amqp driver prefixes a `work` queue with it (`namespace/key`) and uses it as a `pubSub` exchange name |
 | `ordered` | `work` only: one consumer and one handler at a time, in publish order, with failover to another replica. A retried message re-enters at the end of the queue, behind the ones published after it |
 | `persistent` | Optional. Whether the routing's messages survive a broker restart (amqp default: `work` yes, `pubSub` no); a message's `metadata.persistent` wins. The memory driver ignores it |
 | `queue` | `pubSub` consume only: a durable subscription. Consumers naming the same queue share its messages (each once, retried like `work`); each queue name gets its own copy. Publishers omit it |

@@ -102,7 +102,6 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
      * The durable queue of a WORK routing or of a PUB_SUB `queue`
      * (the latter only from consume(): publishers omit it).
      * ponytail: a named queue is keyed by its binding, so one name on two keys is two queues.
-     * ponytail: amqp shares queue `key` between a namespaced and an un-namespaced WORK routing; memory does not.
      */
     protected resolveQueue(routing: MessageRouting): MemoryQueue | undefined {
         const isWork = routing.type === MessageRoutingType.WORK;
