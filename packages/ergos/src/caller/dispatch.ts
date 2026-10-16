@@ -1,32 +1,32 @@
 import type { ILogger, ObjectLiteral } from '../types';
 import type { ComponentEventMap, ComponentMetadata } from '../component';
 import type { MessageBus } from '../message-bus';
-import { buildMessageBusPayload } from '../message-bus';
+import { buildMessage } from '../message-bus';
 import type {
-    ComponentCallerPayload,
-    IComponentCaller,
-    MessageBusDispatchComponentCallerOptions,
+    CallerPayload,
+    DispatchCallerOptions,
+    ICaller,
 } from './types';
 
 /**
  * Publishes a command to a routing; a worker caller elsewhere handles it.
  */
-export class MessageBusDispatchComponentCaller<
+export class DispatchCaller<
     EventMap extends ComponentEventMap = ComponentEventMap,
-> implements IComponentCaller<EventMap> {
-    protected options: MessageBusDispatchComponentCallerOptions;
+> implements ICaller<EventMap> {
+    protected options: DispatchCallerOptions;
 
     protected messageBus?: MessageBus;
 
     protected logger?: ILogger;
 
-    constructor(options: MessageBusDispatchComponentCallerOptions) {
+    constructor(options: DispatchCallerOptions) {
         this.options = options;
         this.messageBus = options.messageBus;
         this.logger = options.logger;
     }
 
-    call<K extends keyof EventMap & string>(key: K, ...payload: ComponentCallerPayload<EventMap[K]>): Promise<void>;
+    call<K extends keyof EventMap & string>(key: K, ...payload: CallerPayload<EventMap[K]>): Promise<void>;
 
     async call(type: string, data: ObjectLiteral, metadata: ComponentMetadata): Promise<void> {
         if (!this.messageBus) {
@@ -35,7 +35,7 @@ export class MessageBusDispatchComponentCaller<
         }
 
         const published = await this.messageBus.publish(
-            buildMessageBusPayload({
+            buildMessage({
                 type,
                 data,
                 metadata: { ...metadata, routing: this.options.routing },

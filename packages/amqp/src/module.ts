@@ -6,17 +6,17 @@ import {
 } from 'amqp-extension';
 import type { ConsumeOptions, QueueOptions } from 'amqp-extension';
 import {
-    MessageBusRoutingType,
-    isMessageBusPayload,
-    serializeMessageBusPayload,
+    MessageRoutingType,
+    isMessage,
+    serializeMessage,
 } from 'ergos';
 import type {
     ILogger,
     IMessageBusConsumer,
     IMessageBusDriver,
-    MessageBusHandler,
-    MessageBusPayload,
-    MessageBusRouting,
+    Message,
+    MessageHandler,
+    MessageRouting,
 } from 'ergos';
 import type { AmqpMessageBusDriverOptions, IAmqpClient } from './types';
 
@@ -58,21 +58,21 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
         return this.clientInstance;
     }
 
-    async publish(routing: MessageBusRouting, message: MessageBusPayload): Promise<boolean> {
+    async publish(routing: MessageRouting, message: Message): Promise<boolean> {
         // Resolves once the broker confirmed the message (a rejection throws);
         // amqplib's boolean only reports write-buffer backpressure.
-        await this.resolveExchange(routing).publish(routing.key, serializeMessageBusPayload(message), {
+        await this.resolveExchange(routing).publish(routing.key, serializeMessage(message), {
             type: message.type,
             messageId: message.id,
-            persistent: message.metadata.persistent ?? routing.type === MessageBusRoutingType.WORK,
+            persistent: message.metadata.persistent ?? routing.type === MessageRoutingType.WORK,
             ...this.resolveQueueOptions(routing),
         });
 
         return true;
     }
 
-    async consume(routing: MessageBusRouting, handler: MessageBusHandler): Promise<IMessageBusConsumer> {
-        const isWork = routing.type === MessageBusRoutingType.WORK;
+    async consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
+        const isWork = routing.type === MessageRoutingType.WORK;
         const options: ConsumeOptions = {
             prefetchCount: this.options.prefetchCount ?? 1,
             // reached only when a retry re-publish fails: the message comes back as a redelivery
@@ -97,20 +97,20 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
 
         return this.resolveExchange(routing).consume(routing.key, options, {
             $any: async (input) => {
-                let payload: unknown;
+                let message: unknown;
                 try {
-                    payload = JSON.parse(new TextDecoder().decode(input.content));
+                    message = JSON.parse(new TextDecoder().decode(input.content));
                 } catch {
                     this.logger?.warn(`Could not parse message in ${routing.key}.`);
                     return;
                 }
 
-                if (!isMessageBusPayload(payload)) {
+                if (!isMessage(message)) {
                     this.logger?.warn(`Dropping malformed message in ${routing.key}.`);
                     return;
                 }
 
-                await handler(payload);
+                await handler(message);
             },
         });
     }
@@ -126,12 +126,12 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
      * Publisher and consumer must declare the queue identically (the broker
      * answers a mismatch with 406), so both sides derive it from the routing.
      */
-    protected resolveQueueOptions(routing: MessageBusRouting): QueueOptions {
+    protected resolveQueueOptions(routing: MessageRouting): QueueOptions {
         return routing.ordered ? { singleActiveConsumer: true } : {};
     }
 
-    protected resolveExchange(routing: MessageBusRouting): IAmqpClient {
-        if (routing.type === MessageBusRoutingType.WORK) {
+    protected resolveExchange(routing: MessageRouting): IAmqpClient {
+        if (routing.type === MessageRoutingType.WORK) {
             return this.client.of({ type: ExchangeType.DIRECT, name: routing.namespace || '' });
         }
 

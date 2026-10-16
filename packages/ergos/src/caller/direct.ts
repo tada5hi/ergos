@@ -3,14 +3,14 @@ import type {
     ComponentHandleOptions,
     IComponent,
 } from '../component';
-import type { ComponentCallerPayload, ComponentDirectCallerResponse, IComponentCaller } from './types';
+import type { CallerPayload, DirectCallerResponse, ICaller } from './types';
 
 /**
  * Calls a component in-process.
  */
-export class DirectComponentCaller<
+export class DirectCaller<
     EventMap extends ComponentEventMap = ComponentEventMap,
-> implements IComponentCaller<EventMap> {
+> implements ICaller<EventMap> {
     protected component: IComponent<EventMap>;
 
     constructor(component: IComponent<EventMap>) {
@@ -19,7 +19,7 @@ export class DirectComponentCaller<
 
     async call<K extends keyof EventMap & string>(
         key: K,
-        ...payload: ComponentCallerPayload<EventMap[K]>
+        ...payload: CallerPayload<EventMap[K]>
     ): Promise<void> {
         await this.callAndWait(key, ...payload);
     }
@@ -48,9 +48,9 @@ export class DirectComponentCaller<
      */
     async callAndWait<K extends keyof EventMap & string>(
         key: K,
-        ...payload: ComponentCallerPayload<EventMap[K]>
-    ): Promise<ComponentDirectCallerResponse<EventMap>> {
-        const events: ComponentDirectCallerResponse<EventMap> = {};
+        ...payload: CallerPayload<EventMap[K]>
+    ): Promise<DirectCallerResponse<EventMap>> {
+        const events: DirectCallerResponse<EventMap> = {};
 
         await this.callWith(key, payload[0], payload[1], {
             handle: (childData, childContext) => {

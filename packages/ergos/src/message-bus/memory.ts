@@ -1,15 +1,15 @@
-import { MessageBusRoutingType } from './constants';
+import { MessageRoutingType } from './constants';
 import type {
     IMessageBusConsumer,
     IMessageBusDriver,
-    MessageBusHandler,
-    MessageBusPayload,
-    MessageBusRouting,
+    Message,
+    MessageHandler,
+    MessageRouting,
 } from './types';
 
 type MemoryConsumer = {
-    routing: MessageBusRouting,
-    handler: MessageBusHandler,
+    routing: MessageRouting,
+    handler: MessageHandler,
     inFlight: Set<Promise<void>>,
 };
 
@@ -22,7 +22,7 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
 
     protected workIndex = 0;
 
-    async publish(routing: MessageBusRouting, message: MessageBusPayload): Promise<boolean> {
+    async publish(routing: MessageRouting, message: Message): Promise<boolean> {
         const matching = this.consumers.filter(
             (consumer) => consumer.routing.key === routing.key &&
                 consumer.routing.type === routing.type &&
@@ -33,7 +33,7 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
             return false;
         }
 
-        if (routing.type === MessageBusRoutingType.WORK) {
+        if (routing.type === MessageRoutingType.WORK) {
             const consumer = matching[this.workIndex % matching.length];
             this.workIndex++;
             if (consumer) {
@@ -50,7 +50,7 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         return true;
     }
 
-    async consume(routing: MessageBusRouting, handler: MessageBusHandler): Promise<IMessageBusConsumer> {
+    async consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
         const consumer: MemoryConsumer = {
             routing, 
             handler, 
@@ -66,7 +66,7 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         };
     }
 
-    protected async deliver(consumer: MemoryConsumer, message: MessageBusPayload): Promise<void> {
+    protected async deliver(consumer: MemoryConsumer, message: Message): Promise<void> {
         const promise = Promise.resolve().then(() => consumer.handler(message));
         consumer.inFlight.add(promise);
         try {

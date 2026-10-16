@@ -2,8 +2,8 @@ import { ClientError, resolveAttempt } from 'amqp-extension';
 import type { ConsumeMessage } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
 import { AmqpMessageBusDriver } from '../../src';
-import { buildMessageBusPayload } from 'ergos';
-import type { MessageBusPayload, MessageBusRouting } from 'ergos';
+import { buildMessage } from 'ergos';
+import type { Message, MessageRouting } from 'ergos';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { FakeLogger } from './fakes/logger';
 import { hubWireFixture } from './fixtures/hub-wire';
@@ -21,11 +21,11 @@ const shapes = {
         namespace: 'custom', 
     },
     pubSub: { type: 'pubSub', key: 'events' },
-} satisfies Record<string, MessageBusRouting>;
+} satisfies Record<string, MessageRouting>;
 
 const retry = { maxAttempts: 5, delay: 1000 };
 
-const message = (routing: MessageBusRouting) => buildMessageBusPayload({
+const message = (routing: MessageRouting) => buildMessage({
     id: 'msg-1',
     type: 'execute',
     data: { id: 'a' },
@@ -113,7 +113,7 @@ describe('src/module', () => {
             if (!published) throw new Error('nothing published');
 
             const [hubRetry] = hubWireFixture.workRetry;
-            const hubBody: MessageBusPayload & { metadata: { attempt?: number } } = JSON.parse(hubRetry.body);
+            const hubBody: Message & { metadata: { attempt?: number } } = JSON.parse(hubRetry.body);
             expect(hubBody.metadata.attempt).toBe(2);
             delete hubBody.metadata.attempt;
 
@@ -156,8 +156,8 @@ describe('src/module', () => {
 
     it('should hand a parsed payload to the handler', async () => {
         const client = new FakeAmqpClient();
-        const seen: MessageBusPayload[] = [];
-        await createDriver(client).consume(shapes.work, (payload) => { seen.push(payload); });
+        const seen: Message[] = [];
+        await createDriver(client).consume(shapes.work, (received) => { seen.push(received); });
 
         await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.work))) });
 
@@ -175,8 +175,8 @@ describe('src/module', () => {
     it('should drop (ack) an unparsable or malformed message with a warning', async () => {
         const client = new FakeAmqpClient();
         const logger = new FakeLogger();
-        const seen: MessageBusPayload[] = [];
-        await createDriver(client, logger).consume(shapes.work, (payload) => { seen.push(payload); });
+        const seen: Message[] = [];
+        await createDriver(client, logger).consume(shapes.work, (received) => { seen.push(received); });
 
         await client.consumes[0]?.handler({ content: Buffer.from('{nope') });
         await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify({ id: 1 })) });
@@ -189,7 +189,7 @@ describe('src/module', () => {
         const client = new FakeAmqpClient();
         const error = Object.assign(new Error('registry unavailable'), { code: 'registryNotFound' });
 
-        await createDriver(client).publish(shapes.work, buildMessageBusPayload({
+        await createDriver(client).publish(shapes.work, buildMessage({
             type: 'executionFailed',
             data: { error },
             metadata: { routing: shapes.work },
@@ -204,10 +204,10 @@ describe('src/module', () => {
 
     it('should honour an explicit persistent flag', async () => {
         const client = new FakeAmqpClient();
-        const payload = message(shapes.work);
-        payload.metadata.persistent = false;
+        const input = message(shapes.work);
+        input.metadata.persistent = false;
 
-        await createDriver(client).publish(shapes.work, payload);
+        await createDriver(client).publish(shapes.work, input);
 
         expect(client.publishes[0]?.options.persistent).toBe(false);
     });

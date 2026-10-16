@@ -2,14 +2,14 @@ import type { ILogger } from '../types';
 import type {
     IMessageBusConsumer,
     IMessageBusDriver,
-    MessageBusHandler,
-    MessageBusHandlers,
-    MessageBusPayload,
+    Message,
     MessageBusPublishOptions,
-    MessageBusRouting,
+    MessageHandler,
+    MessageHandlers,
+    MessageRouting,
 } from './types';
 
-export type MessageBusContext = {
+export type MessageBusOptions = {
     driver: IMessageBusDriver,
     logger?: ILogger,
 };
@@ -19,12 +19,12 @@ export class MessageBus {
 
     protected logger?: ILogger;
 
-    constructor(ctx: MessageBusContext) {
+    constructor(ctx: MessageBusOptions) {
         this.driver = ctx.driver;
         this.logger = ctx.logger;
     }
 
-    publish(message: MessageBusPayload, options: MessageBusPublishOptions = {}): Promise<boolean> {
+    publish(message: Message, options: MessageBusPublishOptions = {}): Promise<boolean> {
         if (options.logging ?? true) {
             this.logger?.debug(`Publishing queue message ${message.type} in ${message.metadata.routing.key}`);
         }
@@ -32,28 +32,28 @@ export class MessageBus {
         return this.driver.publish(message.metadata.routing, message);
     }
 
-    consumeAny(routing: MessageBusRouting, fn: MessageBusHandler): Promise<IMessageBusConsumer> {
-        return this.consume(routing, { $any: fn });
+    consumeAny(routing: MessageRouting, fn: MessageHandler): Promise<IMessageBusConsumer> {
+        return this.consume(routing, { '*': fn });
     }
 
     /**
-     * A handler for the message type wins over $any. A message no handler
+     * A handler for the message type wins over '*'. A message no handler
      * accepts is settled (acked) without error.
      */
-    consume(routing: MessageBusRouting, handlers: MessageBusHandlers): Promise<IMessageBusConsumer> {
-        return this.driver.consume(routing, async (payload) => {
-            this.logger?.debug(`Consuming queue message ${payload.type} in ${routing.key}`);
+    consume(routing: MessageRouting, handlers: MessageHandlers): Promise<IMessageBusConsumer> {
+        return this.driver.consume(routing, async (message) => {
+            this.logger?.debug(`Consuming queue message ${message.type} in ${routing.key}`);
 
             // own keys only: a type such as 'toString' must not hit Object.prototype
-            const handler = (Object.hasOwn(handlers, payload.type) ? handlers[payload.type] : undefined) ??
-                handlers.$any;
+            const handler = (Object.hasOwn(handlers, message.type) ? handlers[message.type] : undefined) ??
+                handlers['*'];
             if (!handler) {
-                this.logger?.debug(`No queue handler to consume message ${payload.type} in ${routing.key}`);
+                this.logger?.debug(`No queue handler to consume message ${message.type} in ${routing.key}`);
                 return;
             }
 
             try {
-                await handler(payload);
+                await handler(message);
             } catch (e) {
                 this.logger?.error(e);
                 throw e;

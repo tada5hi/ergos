@@ -1,11 +1,11 @@
 import type { ObjectLiteral } from '../types';
-import type { MessageBusPayload, MessageBusPayloadInput } from './types';
+import type { Message, MessageInput } from './types';
 
 function isObject(input: unknown): input is ObjectLiteral {
     return typeof input === 'object' && input !== null && !Array.isArray(input);
 }
 
-export function buildMessageBusPayload(input: MessageBusPayloadInput): MessageBusPayload {
+export function buildMessage(input: MessageInput): Message {
     // timestamp stays the first key: the JSON body must match hub's byte for byte
     const { timestamp, ...metadata } = input.metadata;
 
@@ -20,7 +20,7 @@ export function buildMessageBusPayload(input: MessageBusPayloadInput): MessageBu
     };
 }
 
-export function isMessageBusPayload(input: unknown): input is MessageBusPayload {
+export function isMessage(input: unknown): input is Message {
     return isObject(input) &&
         typeof input.id === 'string' &&
         typeof input.type === 'string' &&
@@ -32,8 +32,8 @@ export function isMessageBusPayload(input: unknown): input is MessageBusPayload 
  * JSON with Errors kept as { name, message, code? } — JSON.stringify turns
  * an Error into {}.
  */
-export function serializeMessageBusPayload(payload: MessageBusPayload): string {
-    return JSON.stringify(payload, (_key, value: unknown) => {
+export function serializeMessage(message: Message): string {
+    return JSON.stringify(message, (_key, value: unknown) => {
         if (value instanceof Error) {
             return {
                 name: value.name,
