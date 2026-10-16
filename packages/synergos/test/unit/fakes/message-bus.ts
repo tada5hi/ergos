@@ -9,7 +9,8 @@ import type {
 
 /**
  * Records publishes. Consumers are recorded, never fed.
- * `consume` awaits `consumeGate`, rejects with `consumeError`; `cancel` rejects with `cancelError`;
+ * `publish` rejects with `publishError`; `consume` awaits `consumeGate`, rejects with `consumeError`;
+ * `cancel` rejects with `cancelError`;
  * `active` counts uncancelled consumers.
  */
 export class FakeMessageBus implements IMessageBus {
@@ -23,9 +24,14 @@ export class FakeMessageBus implements IMessageBus {
 
     cancelError: unknown;
 
+    publishError: unknown;
+
     active = 0;
 
     async publish(message: Message): Promise<void> {
+        if (this.publishError) {
+            throw this.publishError;
+        }
         this.published.push(message);
     }
 

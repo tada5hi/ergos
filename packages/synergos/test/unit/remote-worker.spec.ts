@@ -159,6 +159,26 @@ describe('src/worker/module', () => {
         expect(received.map((message) => message.type)).toEqual(['nope']);
     });
 
+    it('should fail the command when publishing a forwarded event rejects', async () => {
+        const messageBus = new FakeMessageBus();
+        messageBus.publishError = new Error('publish');
+        await new RemoteWorker(new TestComponent(), {
+            messageBus,
+            consume: commands,
+            publish: replies,
+        }).start();
+
+        const handler = messageBus.consumed[0]?.handlers['*'];
+        const command = buildMessage({
+            type: 'execute',
+            data: { id: 'a' },
+            metadata: { routing: commands },
+        });
+
+        // over amqp a rejected handler means a retry, never an ack with the reply lost
+        await expect(handler?.(command)).rejects.toThrow('publish');
+    });
+
     it('should report a forwarded event with no publish routing to onUnrouted', async () => {
         const {
             messageBus, 
