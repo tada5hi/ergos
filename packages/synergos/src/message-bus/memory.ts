@@ -17,16 +17,18 @@ type MemoryQueue = {
     routing: MessageRouting,
     index: number,
     pending: Message[],
+    busy?: boolean,
 };
 
 /**
  * In-process driver with amqp's queue semantics: a WORK routing without namespace
  * is a durable queue (kept until consumed, round-robin, `ordered`: one consumer);
  * so is a PUB_SUB `queue`, once a consumer declared it (one copy per queue name).
- * Any other routing gives each consumer its own copy and drops a message nobody
- * consumes. publish() only enqueues; handlers run on a later microtask and their
- * errors are dropped (there is no retry: attempt 1 of 1).
- * ponytail: no prefetch, a consumer's handlers may overlap.
+ * Any other routing (a namespaced WORK one too) gives each consumer its own copy
+ * and drops a message nobody consumes. publish() ignores `queue`, only enqueues;
+ * handlers run on a later microtask and their errors are dropped (there is no
+ * retry: attempt 1 of 1). An `ordered` queue runs one handler at a time.
+ * ponytail: otherwise no prefetch, a consumer's handlers may overlap.
  */
 export class MemoryMessageBusDriver implements IMessageBusDriver {
     protected consumers: MemoryConsumer[] = [];
@@ -40,7 +42,8 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
             throw new Error('The memory message bus driver was closed.');
         }
 
-        const queue = this.resolveQueue(routing);
+        // amqp: a publish declares no queue, so `queue` is a consumer's option only
+        const queue = this.resolveQueue({ ...routing, queue: undefined });
         if (queue) {
             queue.pending.push(message);
             this.flush(queue);
@@ -62,6 +65,10 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
     }
 
     async consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
+        if (this.closed) {
+            throw new Error('The memory message bus driver was closed.');
+        }
+
         const consumer: MemoryConsumer = {
             routing,
             handler,
@@ -71,6 +78,8 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
 
         const queue = this.resolveQueue(routing);
         if (queue) {
+            // the consumer declares the queue (ordered or not), not a publish that came first
+            queue.routing = routing;
             this.flush(queue);
         }
 
@@ -118,8 +127,19 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         const { routing } = queue;
         const matching = this.match(routing).filter((consumer) => consumer.routing.queue === routing.queue);
         while (matching.length > 0 && queue.pending.length > 0) {
-            const consumer = routing.ordered ? matching[0] : matching[queue.index++ % matching.length];
-            this.deliver(consumer!, queue.pending.shift()!);
+            if (routing.ordered) {
+                // amqp: single active consumer, prefetch 1
+                if (queue.busy) {
+                    return;
+                }
+                queue.busy = true;
+                this.deliver(matching[0]!, queue.pending.shift()!).then(() => {
+                    queue.busy = false;
+                    this.flush(queue);
+                });
+                return;
+            }
+            this.deliver(matching[queue.index++ % matching.length]!, queue.pending.shift()!);
         }
     }
 
@@ -131,12 +151,13 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         return a.key === b.key && a.type === b.type && (a.namespace || '') === (b.namespace || '');
     }
 
-    protected deliver(consumer: MemoryConsumer, message: Message): void {
+    protected deliver(consumer: MemoryConsumer, message: Message): Promise<void> {
         const copy = { ...message, metadata: { ...message.metadata, delivery: { attempt: 1, maxAttempts: 1 } } };
         const promise = Promise.resolve()
             .then(() => consumer.handler(copy))
             .catch(() => {});
         consumer.inFlight.add(promise);
         promise.then(() => consumer.inFlight.delete(promise));
+        return promise;
     }
 }

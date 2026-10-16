@@ -90,6 +90,71 @@ describe('src/message-bus/memory', () => {
         expect(seen).toEqual(['a', 'b', 'a', 'b', 'first', 'first']);
     });
 
+    it('should ignore a queue on publish, like amqp (fan out to every subscription)', async () => {
+        const driver = new MemoryMessageBusDriver();
+        const pubSub: MessageRouting = { type: 'pubSub', key: 'events' };
+        const seen: string[] = [];
+        await driver.consume(pubSub, () => { seen.push('plain'); });
+        await driver.consume({ ...pubSub, queue: 'hub' }, () => { seen.push('hub'); });
+        await driver.consume({ ...pubSub, queue: 'other' }, () => { seen.push('other'); });
+
+        await driver.publish({ ...pubSub, queue: 'hub' }, message(pubSub));
+        await driver.publish({ ...pubSub, queue: 'ghost' }, message(pubSub));
+        await drain();
+
+        expect(seen.sort()).toEqual(['hub', 'hub', 'other', 'other', 'plain', 'plain']);
+    });
+
+    it('should run the handlers of an ordered routing one at a time, also across a failover', async () => {
+        const driver = new MemoryMessageBusDriver();
+        const ordered: MessageRouting = {
+            ...work, 
+            key: 'replies', 
+            ordered: true, 
+        };
+        const log: string[] = [];
+        const release = Promise.withResolvers<void>();
+        const first = await driver.consume(ordered, async (received) => {
+            log.push(`start ${received.type}`);
+            if (received.type === 'a') {
+                await release.promise;
+            }
+            log.push(`end ${received.type}`);
+        });
+        await driver.consume(ordered, (received) => { log.push(`second ${received.type}`); });
+
+        await driver.publish(ordered, buildMessage({ type: 'a', metadata: { routing: ordered } }));
+        await driver.publish(ordered, buildMessage({ type: 'b', metadata: { routing: ordered } }));
+        await drain();
+        expect(log).toEqual(['start a']);
+
+        const cancelled = first.cancel();
+        await driver.publish(ordered, buildMessage({ type: 'c', metadata: { routing: ordered } }));
+        await drain();
+        expect(log).toEqual(['start a']);
+
+        release.resolve();
+        await cancelled;
+        await drain();
+        expect(log).toEqual(['start a', 'end a', 'second b', 'second c']);
+    });
+
+    it('should keep a routing ordered when a publish declared its queue first', async () => {
+        const driver = new MemoryMessageBusDriver();
+        const plain: MessageRouting = { ...work, key: 'replies' };
+        const ordered: MessageRouting = { ...plain, ordered: true };
+        const seen: string[] = [];
+
+        await driver.publish(plain, message(plain));
+        await driver.consume(ordered, () => { seen.push('first'); });
+        await driver.consume(ordered, () => { seen.push('second'); });
+        await driver.publish(plain, message(plain));
+        await driver.publish(plain, message(plain));
+        await drain();
+
+        expect(seen).toEqual(['first', 'first', 'first']);
+    });
+
     it('should stop delivering to a cancelled consumer', async () => {
         const driver = new MemoryMessageBusDriver();
         const seen: string[] = [];

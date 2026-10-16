@@ -148,12 +148,15 @@ export interface IMessageBusDriver {
      */
     publish(routing: MessageRouting, message: Message): Promise<void>;
     /**
-     * WORK: each message reaches one consumer; PUB_SUB: every consumer. The
-     * handler's message carries metadata.delivery.
+     * WORK without namespace: each message reaches one consumer; a namespaced
+     * WORK and PUB_SUB: every consumer, except that the consumers naming the
+     * same PUB_SUB queue share one copy. An ordered routing runs one handler at
+     * a time. The handler's message carries metadata.delivery. Rejects after
+     * close().
      */
     consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer>;
     /**
-     * Later publishes reject.
+     * Later publishes and consumes reject.
      */
     close(): Promise<void>;
 }

@@ -152,6 +152,13 @@ export function defineDriverConformance(
             await assert.rejects(driver.publish(to, message(to)));
         });
 
+        run('should reject a consume after close()', async (driver) => {
+            const to = routing('work');
+            await driver.close();
+
+            await assert.rejects(driver.consume(to, () => {}));
+        });
+
         run('should keep publish order on an ordered WORK routing', async (driver) => {
             const to = routing('work', true);
             const all = collect(5);

@@ -222,10 +222,10 @@ dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_
 
 | Field | Purpose |
 |---|---|
-| `type` | `'work'`: each message goes to one consumer (round-robin). `'pubSub'`: each message goes to every consumer |
+| `type` | `'work'`: each message goes to one consumer (round-robin); with a `namespace`, to every consumer. `'pubSub'`: each message goes to every consumer |
 | `key` | The queue (work) or routing key (pubSub) |
 | `namespace` | Optional. Separates routings with the same key, e.g. an exchange name in the amqp driver |
-| `ordered` | `work` only: one consumer at a time, in publish order, with failover to another replica |
+| `ordered` | `work` only: one consumer and one handler at a time, in publish order, with failover to another replica |
 | `queue` | `pubSub` consume only: a durable subscription. Consumers naming the same queue share its messages (each once, retried like `work`); each queue name gets its own copy. Publishers omit it |
 
 ### Consuming
@@ -260,10 +260,11 @@ and `close()`. Every driver keeps the same contract:
 - `publish()` resolves once the transport took the message (amqp: broker confirm, memory:
   enqueued). It never waits for a handler, and a handler's error never reaches it. It rejects
   only when the hand-off fails, e.g. after `close()`.
-- A `work` message reaches one consumer, a `pubSub` message every consumer, except that the
-  consumers naming the same `queue` share one copy.
+- A `work` message without `namespace` reaches one consumer (an `ordered` one: one handler at a
+  time); a namespaced `work` or a `pubSub` message reaches every consumer, except that the
+  consumers naming the same `queue` share one copy. `publish()` ignores `queue`.
 - `cancel()` resolves once the consumer's handlers in flight settled; `close()` makes later
-  publishes reject. `MessageBus.close()` closes its driver.
+  publishes and consumes reject. `MessageBus.close()` closes its driver.
 
 The memory driver keeps amqp's queue semantics: a `work` routing without `namespace` is a queue
 that keeps a message until a consumer takes it, and so is a `pubSub` `queue` once a consumer
@@ -462,7 +463,7 @@ Behaviour that changed:
   `maxAttempts`.
 - **Every command carries a `correlationId`.** `RemoteDispatcher` generates one when the metadata has
   none; 0.1's `DispatchCaller` sent none.
-- **Commands drop a caller's `delivery` and `timestamp`.** Re-dispatching with an inbound
+- **Commands drop a caller's `delivery`, `timestamp` and a legacy body `attempt`.** Re-dispatching with an inbound
   `context.metadata` no longer carries the delivery attempt over; pass it explicitly if a receiver
   needs it.
 - **Worker lifecycle races are handled.** `RemoteWorker` joins a concurrent `start()`, and a `stop()`
