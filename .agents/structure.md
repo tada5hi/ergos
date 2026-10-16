@@ -12,9 +12,9 @@ synergos/
 │   │   │   ├── index.ts                 # Public entry point; everything exported here is public API
 │   │   │   ├── types.ts                 # ObjectLiteral
 │   │   │   ├── hook/                    # invokeHook (guarded hook call), HookArgs
-│   │   │   ├── component/               # IComponent, ICallable, Component, defineScheduledComponent, internal lifecycle
+│   │   │   ├── component/               # IComponent, ICallable, Component, defineScheduledComponent
 │   │   │   ├── dispatcher/              # IDispatcher + LocalDispatcher / RemoteDispatcher, internal wire codec
-│   │   │   ├── worker/                  # RemoteWorker
+│   │   │   ├── worker/                  # RemoteWorker, internal lifecycle helper
 │   │   │   └── message-bus/             # IMessageBus, MessageBus, IMessageBusDriver, MemoryMessageBusDriver, message helpers
 │   │   ├── test/
 │   │   │   ├── unit/*.spec.ts           # One spec per module
@@ -60,11 +60,10 @@ synergos/
 | Module | Purpose |
 |---|---|
 | `synergos/src/component/module.ts` | `Component`: key → handler map, `'*'` fallback, per-handler memoized `initialize()`, child events via `context.handle`, unhandled → `options.handle`, status of top-level calls |
-| `synergos/src/component/scheduled.ts` | `defineScheduledComponent`: first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`, stop-during-start runs no tick |
-| `synergos/src/component/lifecycle.ts` | Internal (not exported): `createLifecycle(acquire)` → `{ start, stop }`; a `start()` joins one in flight, a `stop()` waits for it and releases, a failed `start()` can be retried. Used by `RemoteWorker` and `defineScheduledComponent` |
+| `synergos/src/component/scheduled.ts` | `defineScheduledComponent`: cron expression validated at definition, first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`; `stop()` never waits for a pass (a pass may stop its own component), stop-during-start never schedules, the task is destroyed |
 | `synergos/src/dispatcher/` | `IDispatcher` → `{ correlationId, delivered }`. `LocalDispatcher` (in-process, returns forwarded events as `replies`, optional `reply` component, no lifecycle), `RemoteDispatcher` (publishes a command; `delivered` = `publish()` result; `onUndelivered`) |
-| `synergos/src/dispatcher/wire.ts` | Internal (not exported): `correlate`, `toMessage`, `fromMessage` (the only wire cast), `toForwardedMessage` (drops `attempt` / `timestamp` / `persistent` / `routing`) |
-| `synergos/src/worker/` | `RemoteWorker`: consumes a routing into an `ICallable`, publishes forwarded events (replies and unhandled commands) to `reply`, else `onUnrouted`; an undelivered forwarded event → `onUndelivered`, the command still settles. Itself an `IComponent` on `createLifecycle` |
+| `synergos/src/dispatcher/wire.ts` | Internal (not exported): `correlate`, `toMessage` (drops a caller's `attempt` / `timestamp`, overwrites `routing` in place), `fromMessage` (the only wire cast), `toForwardedMessage` (also drops `persistent`). Used by the dispatchers and `RemoteWorker` |
+| `synergos/src/worker/` | `RemoteWorker`: consumes a routing into an `ICallable`, publishes forwarded events (replies and unhandled commands) to `reply`, else `onUnrouted`; an undelivered forwarded event → `onUndelivered`, the command still settles. Itself an `IComponent` on the internal `worker/lifecycle.ts` (`createLifecycle(acquire)`: a `start()` joins one in flight, a `stop()` waits for it and releases, calls during a release queue in call order so the last one wins, a failed `start()` or release can be retried) |
 | `synergos/src/message-bus/` | `IMessageBus` + `MessageBus` (type dispatch with `'*'` fallback; `onPublish` / `onConsume` / `onUnhandled` / `onError` hooks), `IMessageBusDriver` / `IMessageBusConsumer`, `MemoryMessageBusDriver` (WORK round-robin, PUB_SUB fan-out, `cancel()` awaits in-flight handlers), `buildMessage` / `isMessage` / `serializeMessage` |
 | `synergos/src/hook/` | `invokeHook(hooks, name, ...args)`: calls a hook with `hooks` as `this` and ignores a throw or a rejected promise |
 | `amqp/src/` | `AmqpMessageBusDriver`: routing → exchange/queue options, publish properties, decode + guard (`onMalformed`), retry/drop reporting (`onRetry` / `onDrop`); retry and the redelivery guard are amqp-extension's |

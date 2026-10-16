@@ -1,6 +1,6 @@
+import type { ScheduledTask } from 'node-cron';
 import cron from 'node-cron';
 import { invokeHook } from '../hook';
-import { createLifecycle } from './lifecycle';
 import type { IComponent, ScheduledComponentOptions } from './types';
 
 /**
@@ -9,6 +9,15 @@ import type { IComponent, ScheduledComponentOptions } from './types';
  * start() is typically fire-and-forget, the next tick retries.
  */
 export function defineScheduledComponent(options: ScheduledComponentOptions): IComponent {
+    // fail at definition, not after a full pass in start()
+    if (!cron.validate(options.schedule)) {
+        throw new Error(`Invalid cron expression: ${options.schedule}`);
+    }
+
+    let task: ScheduledTask | undefined;
+    // bumped by every start() and stop(): a start() whose first pass was
+    // overtaken by either must not schedule afterwards
+    let generation = 0;
     let lastSuccessAt: number | undefined;
     let runningSince: number | undefined;
     // the pass in flight: a start() during it (a second start(), or one after a stop())
@@ -33,19 +42,33 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IC
         return pass;
     };
 
-    const { start, stop } = createLifecycle(async () => {
-        if (options.runOnStart ?? true) {
-            await execute();
-        }
-
-        const task = cron.schedule(options.schedule, execute, { noOverlap: true });
-        // ponytail: stop() waits for the first pass only, not for a later tick's pass in flight
-        return async () => { await task.stop(); };
-    });
-
     return {
-        start,
-        stop,
+        async start() {
+            if (task) {
+                return;
+            }
+
+            const current = ++generation;
+            if (options.runOnStart ?? true) {
+                await execute();
+            }
+
+            if (current !== generation) {
+                return;
+            }
+
+            task = cron.schedule(options.schedule, execute, { noOverlap: true });
+        },
+        async stop() {
+            generation++;
+
+            const current = task;
+            task = undefined;
+            // ponytail: does not wait for a pass in flight (a pass may stop its own component);
+            // nothing is scheduled after it
+            // destroy, not stop: a stopped task stays in node-cron's registry
+            await current?.destroy();
+        },
         status: () => ({ lastSuccessAt, runningSince }),
     };
 }

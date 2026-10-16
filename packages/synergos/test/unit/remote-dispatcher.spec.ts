@@ -35,6 +35,36 @@ describe('src/dispatcher/remote', () => {
         expect(messageBus.published[0]?.metadata).toMatchObject({ correlationId: 'c', persistent: false });
     });
 
+    it('should generate a correlationId for an empty one', async () => {
+        const messageBus = new FakeMessageBus();
+        const result = await new RemoteDispatcher<TestEventMap>({ messageBus, routing })
+            .dispatch('execute', { id: 'a' }, { correlationId: '' });
+
+        expect(result.correlationId).not.toBe('');
+        expect(messageBus.published[0]?.metadata).toMatchObject({ correlationId: result.correlationId });
+    });
+
+    it('should not inherit transport metadata from a re-dispatched ctx.metadata', async () => {
+        const messageBus = new FakeMessageBus();
+        const inbound = {
+            timestamp: 1,
+            attempt: 3,
+            persistent: false,
+            routing: { type: 'pubSub', key: 'other' } as MessageRouting,
+            correlationId: 'c',
+        };
+        const before = Date.now();
+        await new RemoteDispatcher<TestEventMap>({ messageBus, routing })
+            .dispatch('execute', { id: 'a' }, inbound);
+
+        const metadata = messageBus.published[0]?.metadata;
+        expect(metadata).not.toHaveProperty('attempt');
+        expect(metadata?.timestamp).toBeGreaterThanOrEqual(before);
+        expect(metadata?.routing).toEqual(routing);
+        expect(metadata).toMatchObject({ correlationId: 'c', persistent: false });
+        expect(Object.keys(metadata ?? {})).toEqual(['timestamp', 'persistent', 'routing', 'correlationId']);
+    });
+
     it('should report delivered from the bus', async () => {
         const messageBus = new FakeMessageBus();
         const dispatcher = new RemoteDispatcher<TestEventMap>({ messageBus, routing });

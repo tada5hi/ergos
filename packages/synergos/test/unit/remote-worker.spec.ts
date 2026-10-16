@@ -5,6 +5,7 @@ import {
     MessageBus,
     RemoteDispatcher,
     RemoteWorker,
+    buildMessage,
 } from '../../src';
 import type { ForwardedEvent, Message, MessageRouting } from '../../src';
 import type { TestEventMap } from './fakes/component';
@@ -65,7 +66,7 @@ describe('src/worker/module', () => {
     });
 
     it('should clean the forwarded metadata', async () => {
-        const { messageBus, dispatcher } = setup();
+        const { messageBus } = setup();
         const attempts: unknown[] = [];
         const component = new Component<TestEventMap>();
         component.mount('execute', async (data, ctx) => {
@@ -81,11 +82,19 @@ describe('src/worker/module', () => {
         }).start();
 
         const before = Date.now();
-        await dispatcher.dispatch('execute', { id: 'a' }, {
+        // the command's own transport metadata, as a handler's ctx.metadata would carry it
+        const inbound = {
+            timestamp: 1,
             attempt: 5,
             persistent: true,
             correlationId: 'c',
-        });
+            routing: commands,
+        };
+        await messageBus.publish(buildMessage({
+            type: 'execute', 
+            data: { id: 'a' }, 
+            metadata: inbound, 
+        }));
 
         expect(attempts).toEqual([5]);
         expect(received).toHaveLength(1);
@@ -94,6 +103,22 @@ describe('src/worker/module', () => {
         expect(metadata).not.toHaveProperty('attempt');
         expect(metadata).not.toHaveProperty('persistent');
         expect(metadata?.timestamp).toBeGreaterThanOrEqual(before);
+    });
+
+    it('should keep the key order of the forwarded metadata', async () => {
+        const { messageBus, dispatcher } = setup();
+        const component = new Component<TestEventMap>();
+        component.mount('execute', (data, ctx) => ctx.handle('executionFinished', data, { step: 2 }));
+        const received = await consumeReplies(messageBus);
+        await new RemoteWorker(component, {
+            messageBus,
+            consume: commands,
+            reply: replies,
+        }).start();
+
+        await dispatcher.dispatch('execute', { id: 'a' }, { correlationId: 'c' });
+
+        expect(Object.keys(received[0]?.metadata ?? {})).toEqual(['timestamp', 'correlationId', 'routing', 'step']);
     });
 
     it('should forward an unknown command to reply', async () => {
@@ -116,7 +141,7 @@ describe('src/worker/module', () => {
             component, 
             dispatcher, 
         } = setup();
-        const unrouted: ForwardedEvent<TestEventMap>[] = [];
+        const unrouted: ForwardedEvent[] = [];
 
         await new RemoteWorker(component, {
             messageBus,
@@ -204,6 +229,7 @@ describe('src/worker/module', () => {
 
         await new Promise((resolve) => { setTimeout(resolve, 10); });
         expect(order).toEqual([]);
+        expect(component.lifecycle).toEqual(['start']);
 
         blocker.resolve();
         await Promise.all([dispatched, stopped]);
@@ -325,6 +351,91 @@ describe('src/worker/module', () => {
 
         expect(component.lifecycle).toEqual(['start', 'stop', 'start', 'stop']);
         expect(messageBus.active).toBe(0);
+    });
+
+    it('should never overlap acquire and release across stop/start/stop/start', async () => {
+        const messageBus = new FakeMessageBus();
+        const log: string[] = [];
+        const tick = () => new Promise((resolve) => { setTimeout(resolve, 2); });
+        const component = new TestComponent();
+        component.start = async () => { log.push('start>'); await tick(); log.push('<start'); };
+        component.stop = async () => { log.push('stop>'); await tick(); log.push('<stop'); };
+        const worker = new RemoteWorker(component, { messageBus, consume: commands });
+        await worker.start();
+
+        await Promise.all([worker.stop(), worker.start(), worker.stop(), worker.start()]);
+
+        expect(log).toEqual([
+            'start>', 
+            '<start',
+            'stop>', 
+            '<stop',
+            'start>', 
+            '<start',
+            'stop>', 
+            '<stop',
+            'start>', 
+            '<start',
+        ]);
+        expect(messageBus.active).toBe(1);
+    });
+
+    it('should resolve stop() when a concurrent start() fails', async () => {
+        const messageBus = new FakeMessageBus();
+        messageBus.consumeError = new Error('x');
+        const component = new TestComponent();
+        const worker = new RemoteWorker(component, { messageBus, consume: commands });
+
+        const started = worker.start();
+        const stopped = worker.stop();
+
+        await expect(started).rejects.toThrow('x');
+        await expect(stopped).resolves.toBeUndefined();
+        expect(component.lifecycle).toEqual(['start', 'stop']);
+    });
+
+    it('should reject start() with the consume error even when component.stop() fails', async () => {
+        const messageBus = new FakeMessageBus();
+        messageBus.consumeError = new Error('consume');
+        const component = new TestComponent();
+        component.stop = async () => {
+            component.lifecycle.push('stop');
+            throw new Error('stop');
+        };
+
+        await expect(new RemoteWorker(component, { messageBus, consume: commands }).start())
+            .rejects.toThrow('consume');
+        expect(component.lifecycle).toEqual(['start', 'stop']);
+    });
+
+    it('should start after a stop whose release failed, leaving the error to stop()', async () => {
+        const messageBus = new FakeMessageBus();
+        const component = new TestComponent();
+        component.stop = async () => {
+            component.lifecycle.push('stop');
+            throw new Error('stop');
+        };
+        const worker = new RemoteWorker(component, { messageBus, consume: commands });
+        await worker.start();
+
+        const stopped = worker.stop();
+        const started = worker.start();
+
+        await expect(stopped).rejects.toThrow('stop');
+        await expect(started).resolves.toBeUndefined();
+        expect(component.lifecycle).toEqual(['start', 'stop', 'start']);
+        expect(messageBus.consumed).toHaveLength(2);
+    });
+
+    it('should stop the component even when cancelling the consumer fails', async () => {
+        const messageBus = new FakeMessageBus();
+        const component = new TestComponent();
+        const worker = new RemoteWorker(component, { messageBus, consume: commands });
+        await worker.start();
+        messageBus.cancelError = new Error('cancel');
+
+        await expect(worker.stop()).rejects.toThrow('cancel');
+        expect(component.lifecycle).toEqual(['start', 'stop']);
     });
 
     it('should resolve a concurrent stop only after the component stopped', async () => {

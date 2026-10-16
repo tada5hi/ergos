@@ -180,8 +180,9 @@ await cleaner.stop();
 - `start()` runs a first pass before scheduling. Pass `runOnStart: false` to wait for the first tick.
 - Passes never overlap: a tick while a pass is still running is skipped.
 - A failing pass goes to `hooks.onError` and never rejects. The next tick simply runs again.
-- `stop()` during the first pass waits for that pass to settle and stops the schedule before its
-  first tick.
+- `stop()` never waits for a pass in flight, so a pass may stop its own component. Stopped during
+  the first pass, the component never schedules a tick.
+- An invalid cron expression throws when the component is defined, before any pass runs.
 
 ## Message bus
 
@@ -269,6 +270,7 @@ const replies = { type: 'work', key: 'builder-events' } as const;
 const inbox = new Component<BuilderEvents>();
 inbox.mount('buildFinished', (data, context) => done(context.metadata.correlationId, data));
 
+// the event map types the keys: pass it, or annotate the target as here
 const dispatcher: IDispatcher<BuilderEvents> = messageBus
     ? new RemoteDispatcher({ messageBus, routing: commands })
     : new LocalDispatcher(new Builder(), { reply: inbox });
@@ -316,8 +318,14 @@ next one. Dispatchers and workers treat both kinds the same.
 A `RemoteWorker` passes an inbound command's metadata to the component unchanged, including
 `attempt` from a retrying driver. The events it publishes keep the rest of the metadata (such as
 the `correlationId`) but drop the command's `attempt`, `timestamp`, `persistent` and `routing`.
-A forwarded event the bus does not deliver is reported to `onUndelivered`; the command itself still
-settles (acked), since a retry would re-run its side effects for a reply-only problem.
+Likewise, a dispatcher never sends a caller's `attempt`, `timestamp` or `routing`, so dispatching
+with an inbound `context.metadata` (to keep the `correlationId`) starts a fresh command; only a
+`persistent` the caller passes is kept.
+
+A forwarded event whose publish resolves `false` (no consumer, memory driver) is reported to
+`onUndelivered`, and the command still settles (acked): a retry would re-run its side effects for a
+reply-only problem. A publish that *rejects* fails the command like a throwing handler: over AMQP the
+command is retried, and with the memory driver an inbox handler's error rejects `dispatch()`.
 
 ## Hooks
 

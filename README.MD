@@ -123,7 +123,7 @@ const worker = new RemoteWorker(builder, {
 });
 await worker.start();
 
-// caller side: an inbox component for the replies, then send a command
+// dispatching side: an inbox component for the replies, then send a command
 const inbox = new Component<BuilderEvents>();
 inbox.mount('buildFinished', (data, context) => console.log('finished', data.id, context.metadata.correlationId));
 await new RemoteWorker(inbox, { messageBus, consume: { type: 'work', key: 'builder-events' } }).start();

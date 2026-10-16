@@ -7,17 +7,19 @@ type Release = () => Promise<void>;
  */
 export function createLifecycle(acquire: () => Promise<Release>) {
     let state: Promise<Release> | undefined;
-    let stopping: Promise<void> | undefined;
+    // the release in flight, settled either way: start() and a later stop() queue on it in call
+    // order, and a failed release stays the error of the stop() that started it
+    let settled: Promise<void> | undefined;
 
     const stop = (): Promise<void> => {
-        if (stopping) {
+        if (settled) {
             // a start() may be waiting for this release: stop again after it, so the last call wins
-            return stopping.then(stop);
+            return settled.then(stop);
         }
 
         const current = state;
         state = undefined;
-        stopping = (async () => {
+        const released = (async () => {
             if (!current) {
                 return;
             }
@@ -30,16 +32,17 @@ export function createLifecycle(acquire: () => Promise<Release>) {
             }
 
             await release();
-        })().finally(() => { stopping = undefined; });
+        })();
+        settled = released.catch(() => {}).then(() => { settled = undefined; });
 
-        return stopping;
+        return released;
     };
 
     return {
         async start() {
             // acquire synchronously unless a release is in flight, so a stop() right after sees it
-            while (stopping) {
-                await stopping;
+            while (settled) {
+                await settled;
             }
 
             if (!state) {

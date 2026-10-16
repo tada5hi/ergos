@@ -10,29 +10,34 @@ export function correlate<M extends ComponentMetadata>(metadata?: M): M & { corr
     return { ...metadata as M, correlationId: metadata?.correlationId || crypto.randomUUID() };
 }
 
+/**
+ * The transport owns attempt, timestamp and routing: a command re-dispatched with an inbound
+ * ctx.metadata must not inherit them. A caller-given persistent is kept.
+ */
 export function toMessage(
     key: string,
     data: ObjectLiteral,
     metadata: ComponentMetadata,
     routing: MessageRouting,
 ): Message {
+    const rest = { ...metadata };
+    delete rest.attempt;
+    delete rest.timestamp;
+
+    // routing is overwritten in place, not deleted: the key order stays hub's
     return buildMessage({
         type: key,
         data,
-        metadata: { ...metadata, routing },
+        metadata: { ...rest, routing },
     });
 }
 
 /**
- * A forwarded event gets its own timestamp and the persistence of its own
- * routing, not the command's; a delivery attempt never leaks into it.
+ * A forwarded event gets the persistence of its own routing, not the command's.
  */
 export function toForwardedMessage(event: ForwardedEvent, routing: MessageRouting): Message {
     const metadata = { ...event.metadata };
-    delete metadata.attempt;
-    delete metadata.timestamp;
     delete metadata.persistent;
-    delete metadata.routing;
 
     return toMessage(event.key, event.data, metadata, routing);
 }

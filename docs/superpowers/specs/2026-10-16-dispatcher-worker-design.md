@@ -177,21 +177,21 @@ if (!result.delivered) await local.dispatch('build', data);
 
 ### Wire codec (internal)
 
-- `toMessage(key, data, metadata, routing)`: keeps the caller's metadata (a dispatcher-given
-  `persistent` reaches the command), then `buildMessage({ type: key, data, metadata: { ...metadata, routing } })`.
-- `toForwardedMessage(event, routing)`: removes `attempt`, `timestamp`, `persistent` and `routing`
-  from the forwarded event's metadata, then builds the message like `toMessage`.
-  `buildMessage` keeps `timestamp` first, so the body stays byte-compatible with hub's.
+- `toMessage(key, data, metadata, routing)`: drops a caller's `attempt` and `timestamp` (the
+  transport owns them, so re-dispatching with an inbound `ctx.metadata` starts a fresh command),
+  keeps a caller-given `persistent`, overwrites `routing` in place (key order stays hub's), then
+  `buildMessage`, which keeps `timestamp` first.
+- `toForwardedMessage(event, routing)`: also drops `persistent`, then `toMessage`.
 - `fromMessage(message)`: `{ key: message.type, data: message.data, metadata: message.metadata }`
   — the only cast at the wire boundary.
 
-### Lifecycle helper (internal)
+### Lifecycle helper (internal, `RemoteWorker` only)
 
-`createLifecycle(acquire)` (acquire returns its release) → `{ start, stop }` implementing the guarantees above. Used by
-`RemoteWorker` and `defineScheduledComponent`, whose `generation` counter it replaces.
-`defineScheduledComponent` keeps every documented behaviour (first pass on start, `noOverlap`,
-failed pass → `onError`, stop-during-start never schedules), with one change: `stop()` now waits
-for a first pass in flight instead of returning before it settles.
+`createLifecycle(acquire)` (acquire returns its release) → `{ start, stop }` implementing the
+guarantees above. Calls made during a release queue in call order, so the last one wins, and a
+failed release is only the error of the `stop()` that started it.
+
+`defineScheduledComponent` keeps its own `generation` guard (amended after the audit, see below).
 
 ## Tests
 
@@ -223,8 +223,13 @@ move to the new names.
 ## Calls made by the author (not discussed)
 
 - Type name `ForwardedEvent` (was "Reply" in discussion), since it also carries unknown commands.
-- `onUnrouted` takes one `ForwardedEvent` instead of `(key, data, metadata)`.
-- `stop()` of a scheduled component waits for a first pass in flight.
+- `onUnrouted` takes one untyped `ForwardedEvent` instead of `(key, data, metadata)`: an unknown
+  command from the wire is forwarded too, so the event map can't vouch for it.
+- ~~`stop()` of a scheduled component waits for a first pass in flight.~~ Reverted after the
+  audit: a pass that stops its own component then hangs `start()` and `stop()` forever, and a
+  hanging first pass blocks shutdown. The scheduled component keeps master's guard (`stop()` never
+  waits for a pass, stop-during-start never schedules), destroys its node-cron task on stop and
+  validates the expression at definition.
 - `LocalDispatcher` has no lifecycle (as `DirectCaller` today): the app starts / stops the
   component and the `reply` inbox it hands over. `Component.start()` is a no-op by default, so this
   rarely matters. Interchangeable means the *dispatch* side, not who owns lifecycles.

@@ -4,7 +4,7 @@ import type {
     ICallable,
     IComponent,
 } from '../component';
-import { createLifecycle } from '../component/lifecycle';
+import { createLifecycle } from './lifecycle';
 import { fromMessage, toForwardedMessage } from '../dispatcher/wire';
 import { invokeHook } from '../hook';
 import type { Message } from '../message-bus';
@@ -18,11 +18,11 @@ export class RemoteWorker<
 > implements IComponent<EventMap> {
     protected component: ICallable<EventMap>;
 
-    protected options: RemoteWorkerOptions<EventMap>;
+    protected options: RemoteWorkerOptions;
 
     protected lifecycle: ReturnType<typeof createLifecycle>;
 
-    constructor(component: ICallable<EventMap>, options: RemoteWorkerOptions<EventMap>) {
+    constructor(component: ICallable<EventMap>, options: RemoteWorkerOptions) {
         this.component = component;
         this.options = options;
         this.lifecycle = createLifecycle(async () => {
@@ -38,8 +38,11 @@ export class RemoteWorker<
 
             // cancel() waits for the handler in flight
             return async () => {
-                await consumer.cancel();
-                await component.stop();
+                try {
+                    await consumer.cancel();
+                } finally {
+                    await component.stop();
+                }
             };
         });
     }
