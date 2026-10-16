@@ -9,7 +9,7 @@ An npm workspaces monorepo with two packages:
   (`defineScheduledComponent`), and the message bus that routes commands and replies between
   components (`IMessageBus` / `MessageBus`, `IMessageBusDriver`, `MemoryMessageBusDriver`,
   `DirectCaller` / `DispatchCaller` / `WorkerCaller`). One runtime dependency (`node-cron`).
-- **`@ergos/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
+- **`ergos-amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
   [amqp-extension](https://www.npmjs.com/package/amqp-extension) (a real dependency);
   `ergos` is a peer.
 

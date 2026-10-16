@@ -1,5 +1,5 @@
 {
-    "name": "@ergos/root",
+    "name": "ergos-root",
     "private": true,
     "version": "0.0.0",
     "type": "module",

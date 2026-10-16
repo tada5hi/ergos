@@ -20,18 +20,18 @@ scheduled background jobs, and the message bus that routes commands and replies 
 | Package | Description |
 |---|---|
 | [`ergos`](./packages/ergos) | Components, scheduled components, the message bus (`MessageBus`, `IMessageBus`, `MemoryMessageBusDriver`) and the direct / dispatch / worker callers |
-| [`@ergos/amqp`](./packages/amqp) | `AmqpMessageBusDriver`: the message bus over RabbitMQ via [amqp-extension](https://www.npmjs.com/package/amqp-extension) |
+| [`ergos-amqp`](./packages/amqp) | `AmqpMessageBusDriver`: the message bus over RabbitMQ via [amqp-extension](https://www.npmjs.com/package/amqp-extension) |
 
 ```bash
 npm install ergos --save
-npm install @ergos/amqp --save # for RabbitMQ
+npm install ergos-amqp --save # for RabbitMQ
 ```
 
 ## Quick Start
 
 ```ts
 import { Component, DispatchCaller, MessageBus, WorkerCaller } from 'ergos';
-import { AmqpMessageBusDriver } from '@ergos/amqp';
+import { AmqpMessageBusDriver } from 'ergos-amqp';
 
 const messageBus = new MessageBus({
     driver: new AmqpMessageBusDriver({ connectionString: 'amqp://localhost', defaultTopicExchange: 'app' }),
@@ -55,7 +55,7 @@ await new DispatchCaller({ routing: { type: 'work', key: 'builder' }, messageBus
 ```
 
 See the package READMEs for the full API: [ergos](./packages/ergos/README.md),
-[@ergos/amqp](./packages/amqp/README.md).
+[ergos-amqp](./packages/amqp/README.md).
 
 ## Development
 

@@ -23,7 +23,7 @@ ergos/
 │   │   ├── tsconfig.json                # src + test (paths-mapped), used by `typecheck`
 │   │   ├── tsconfig.build.json          # src only, resolved through node_modules; used by `build:types`
 │   │   └── tsdown.config.ts             # esm, dts, sourcemap
-│   └── amqp/                            # package `@ergos/amqp`
+│   └── amqp/                            # package `ergos-amqp`
 │       ├── src/                         # AmqpMessageBusDriver, IAmqpClient, hook/event types
 │       ├── test/
 │       │   ├── unit/driver.spec.ts
@@ -45,7 +45,7 @@ ergos/
 ├── package.json                         # private root: workspaces, nx run-many scripts, shared devDependencies
 ├── nx.json                              # build dependsOn ^build; cacheable build/lint/test/typecheck
 ├── tsconfig.build.json                  # shared compiler options (extends @tada5hi/tsconfig)
-├── tsconfig.json                        # + paths: ergos / @ergos/amqp -> packages/*/src
+├── tsconfig.json                        # + paths: ergos / ergos-amqp -> packages/*/src
 ├── eslint.config.js                     # flat config wrapping @tada5hi/eslint-config
 ├── commitlint.config.mjs
 ├── release-please-config.json           # monorepo mode, node-workspace plugin
@@ -74,7 +74,7 @@ on a consume path, where a propagated error would turn an ack into a retry.
 ## Key Dependencies
 
 - `ergos`: `node-cron` (scheduled components), its only runtime dependency. It never imports amqp-extension.
-- `@ergos/amqp`: `amqp-extension` (`^5.1.0`, dependency) and `ergos` (peer + dev, workspace version; release-please's node-workspace plugin bumps the range).
+- `ergos-amqp`: `amqp-extension` (`^5.1.0`, dependency) and `ergos` (peer + dev, workspace version; release-please's node-workspace plugin bumps the range).
 
 ## Package Exports
 
