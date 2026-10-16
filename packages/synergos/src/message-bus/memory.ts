@@ -21,11 +21,11 @@ type MemoryQueue = {
 };
 
 /**
- * In-process driver with amqp's queue semantics: a WORK routing without namespace
- * is a durable queue (kept until consumed, round-robin, `ordered`: one consumer);
+ * In-process driver with amqp's queue semantics: a WORK routing (per namespace and
+ * key) is a durable queue (kept until consumed, round-robin, `ordered`: one consumer);
  * so is a PUB_SUB `queue`, once a consumer declared it (one copy per queue name).
- * Any other routing (a namespaced WORK one too) gives each consumer its own copy
- * and drops a message nobody consumes. publish() ignores `queue`, only enqueues;
+ * Any other PUB_SUB routing gives each consumer its own copy and drops a message
+ * nobody consumes. publish() ignores `queue`, only enqueues;
  * handlers run on a later microtask and their errors are dropped (there is no
  * retry: attempt 1 of 1). An `ordered` queue runs one handler at a time.
  * ponytail: otherwise no prefetch, a consumer's handlers may overlap.
@@ -99,18 +99,18 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
     }
 
     /**
-     * The durable queue of a WORK routing without namespace or of a PUB_SUB `queue`
+     * The durable queue of a WORK routing or of a PUB_SUB `queue`
      * (the latter only from consume(): publishers omit it).
      * ponytail: a named queue is keyed by its binding, so one name on two keys is two queues.
+     * ponytail: amqp shares queue `key` between a namespaced and an un-namespaced WORK routing; memory does not.
      */
     protected resolveQueue(routing: MessageRouting): MemoryQueue | undefined {
-        // amqp: a namespaced WORK routing is a named direct exchange, consumed through exclusive queues
         const isWork = routing.type === MessageRoutingType.WORK;
-        if (isWork ? routing.namespace : !routing.queue) {
+        if (!isWork && !routing.queue) {
             return undefined;
         }
 
-        const name = isWork ? routing.key : `${routing.namespace || ''}/${routing.key}/${routing.queue}`;
+        const name = JSON.stringify([routing.type, routing.namespace || '', routing.key, isWork ? '' : routing.queue]);
         let queue = this.queues.get(name);
         if (!queue) {
             queue = {

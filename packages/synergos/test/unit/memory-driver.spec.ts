@@ -39,28 +39,27 @@ describe('src/message-bus/memory', () => {
         expect(seen.map((received) => received.id)).toEqual([published.id]);
     });
 
-    it('should drop a message without consumer on a namespaced WORK or a PUB_SUB routing', async () => {
+    it('should drop a message without consumer on a PUB_SUB routing', async () => {
         const driver = new MemoryMessageBusDriver();
         const seen: string[] = [];
-        const namespaced: MessageRouting = { ...work, namespace: 'tasks' };
         const pubSub: MessageRouting = { type: 'pubSub', key: 'events' };
 
-        await driver.publish(namespaced, message(namespaced));
         await driver.publish(pubSub, message(pubSub));
-        await driver.consume(namespaced, () => { seen.push('namespaced'); });
         await driver.consume(pubSub, () => { seen.push('pubSub'); });
         await drain();
 
         expect(seen).toEqual([]);
     });
 
-    it('should fan a namespaced WORK message out like amqp (an exclusive queue per consumer)', async () => {
+    it('should keep a namespaced WORK message in a queue of its own until a consumer arrives', async () => {
         const driver = new MemoryMessageBusDriver();
         const seen: string[] = [];
         const namespaced: MessageRouting = { ...work, namespace: 'tasks' };
+        await driver.consume(work, () => { seen.push('plain'); });
+
+        await driver.publish(namespaced, message(namespaced));
         await driver.consume(namespaced, () => { seen.push('a'); });
         await driver.consume(namespaced, () => { seen.push('b'); });
-
         await driver.publish(namespaced, message(namespaced));
         await drain();
 

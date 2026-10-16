@@ -116,15 +116,21 @@ Each `MessageRouting` maps onto an exchange and a queue:
 |---|---|---|---|---|
 | `{ type: 'work', key }` | Default (direct) exchange | Durable queue named `key`, shared by all consumers | yes | yes |
 | `{ type: 'work', key, ordered: true }` | Default (direct) exchange | As above, with `x-single-active-consumer` | yes | yes |
-| `{ type: 'work', key, namespace }` | Direct exchange `namespace` | Exclusive temporary queue per consumer, bound to `key` | yes | yes |
+| `{ type: 'work', key, namespace }` | Topic exchange `namespace` | Durable queue named `key`, bound to `key`, shared by all consumers | yes | yes |
 | `{ type: 'pubSub', key }` | Topic exchange `namespace`, else `defaultTopicExchange` | Exclusive temporary queue per consumer, bound to `key` | no | no |
 | `{ type: 'pubSub', key, queue }` (consume) | As above | Durable queue named `queue`, bound to `key`, shared by the consumers naming it | no | yes |
 
 A message's `metadata.persistent` overrides the persistence of its routing. Its `metadata.expiresAt`
 becomes the AMQP `expiration` (the remaining ms), so the broker drops it unconsumed; one that still
-arrives late is dropped by `MessageBus` (`onExpired`). Only a `work` routing
-without a `namespace` and a `pubSub` `queue` keep messages while no consumer is connected and split
-them between replicas.
+arrives late is dropped by `MessageBus` (`onExpired`). Only a `work` routing and a `pubSub` `queue`
+keep messages while no consumer is connected and split them between replicas.
+
+A namespaced `work` routing goes through a topic exchange, not a direct one: amqp-extension takes
+every direct exchange for the default exchange and would neither declare nor bind it. Only the
+consumer declares and binds its queue, so the queue keeps messages from the first consume on; one
+published before that is unroutable and dropped. Its queue is the same as the one of the `work`
+routing without `namespace` and the same `key`, and a `pubSub` routing with the same `namespace`
+and `key` reaches it too: give them distinct keys.
 
 A `pubSub` `queue` is a durable fan-out subscription: each service names its own queue (e.g.
 `hub-core-authup-events`) and gets its own copy, its replicas share it. Only the consumer passes

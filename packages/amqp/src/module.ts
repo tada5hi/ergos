@@ -27,8 +27,9 @@ import type {
 
 /**
  * Maps the message bus onto amqp-extension. WORK routings go through the default
- * (direct) exchange and are retried by amqp-extension (x-attempt header, backoff,
- * redelivery guard); PUB_SUB routings go through a topic exchange and are not retried,
+ * (direct) exchange, a namespaced one through a topic exchange into the shared queue
+ * `key`, and are retried by amqp-extension (x-attempt header, backoff, redelivery
+ * guard); PUB_SUB routings go through a topic exchange and are not retried,
  * unless consumed through a named, durable `queue`, which is retried like WORK.
  * Delivery is at-least-once.
  */
@@ -81,7 +82,9 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
 
     async consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
         // a PUB_SUB queue is durable and shared, so it must not lose a failed message either
-        const isRetried = routing.type === MessageRoutingType.WORK || !!routing.queue;
+        const isWork = routing.type === MessageRoutingType.WORK;
+        const isRetried = isWork || !!routing.queue;
+        const queue = isWork ? routing.namespace && routing.key : routing.queue;
         const maxAttempts = isRetried ? this.options.maxAttempts ?? 5 : 1;
         const options: ConsumeOptions = {
             prefetchCount: this.options.prefetchCount ?? 1,
@@ -89,7 +92,8 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
             requeueOnFailure: isRetried,
             ...this.resolveQueueOptions(routing),
             // only the consumer declares it: a topic publish declares no queue, so no 406
-            ...(routing.queue ? { queue: routing.queue } : {}),
+            // ponytail: so a namespaced WORK message published before the first consume is unroutable (dropped)
+            ...(queue ? { queue } : {}),
         };
         if (isRetried) {
             options.retry = { maxAttempts, delay: this.options.retryDelay ?? 1000 };
@@ -185,9 +189,13 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
     }
 
     protected resolveExchange(routing: MessageRouting): IAmqpClient {
-        if (routing.type === MessageRoutingType.WORK) {
-            return this.client.of({ type: ExchangeType.DIRECT, name: routing.namespace || '' });
+        if (routing.type === MessageRoutingType.WORK && !routing.namespace) {
+            return this.client.of({ type: ExchangeType.DIRECT, name: '' });
         }
+
+        // amqp-extension takes any direct exchange for the default one (no declare, no bind),
+        // so a namespaced WORK routing is a topic exchange; its consumers share the queue `key`.
+        // ponytail: a key with `*` / `#` is a topic pattern, and a PUB_SUB publish on the namespace reaches it.
 
         return this.client.of({ type: ExchangeType.TOPIC, name: routing.namespace || this.options.defaultTopicExchange });
     }

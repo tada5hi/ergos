@@ -226,7 +226,7 @@ dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_
 
 | Field | Purpose |
 |---|---|
-| `type` | `'work'`: each message goes to one consumer (round-robin); with a `namespace`, to every consumer. `'pubSub'`: each message goes to every consumer |
+| `type` | `'work'`: each message goes to one consumer (round-robin), also with a `namespace`. `'pubSub'`: each message goes to every consumer |
 | `key` | The queue (work) or routing key (pubSub) |
 | `namespace` | Optional. Separates routings with the same key, e.g. an exchange name in the amqp driver |
 | `ordered` | `work` only: one consumer and one handler at a time, in publish order, with failover to another replica. A retried message re-enters at the end of the queue, behind the ones published after it |
@@ -264,14 +264,14 @@ and `close()`. Every driver keeps the same contract:
 - `publish()` resolves once the transport took the message (amqp: broker confirm, memory:
   enqueued). It never waits for a handler, and a handler's error never reaches it. It rejects
   only when the hand-off fails, e.g. after `close()`.
-- A `work` message without `namespace` reaches one consumer (an `ordered` one: one handler at a
-  time); a namespaced `work` or a `pubSub` message reaches every consumer, except that the
-  consumers naming the same `queue` share one copy. `publish()` ignores `queue`.
+- A `work` message reaches one consumer (an `ordered` one: one handler at a time); a `pubSub`
+  message reaches every consumer, except that the consumers naming the same `queue` share one
+  copy. `publish()` ignores `queue`.
 - `cancel()` resolves once the consumer's handlers in flight settled; `close()` makes later
   publishes and consumes reject. `MessageBus.close()` closes its driver.
 
-The memory driver keeps amqp's queue semantics: a `work` routing without `namespace` is a queue
-that keeps a message until a consumer takes it, and so is a `pubSub` `queue` once a consumer
+The memory driver keeps amqp's queue semantics: a `work` routing (per `namespace` and `key`) is a
+queue that keeps a message until a consumer takes it, and so is a `pubSub` `queue` once a consumer
 declared it (round-robin across its consumers); any other routing gives each consumer its own copy
 and drops a message nobody consumes (amqp: an exclusive queue per consumer). Unlike amqp, which
 parses each delivery anew, the memory driver hands every consumer the published message's own

@@ -73,6 +73,23 @@ export function defineDriverConformance(
             assert.deepEqual(ids.sort(), published.map((item) => item.id).sort());
         });
 
+        run('should deliver each namespaced WORK message to exactly one consumer', async (driver) => {
+            const to: MessageRouting = { ...routing('work'), namespace: 'conformance' };
+            const all = collect(4);
+            await driver.consume(to, all.handler);
+            await driver.consume(to, all.handler);
+
+            const published = [message(to), message(to), message(to), message(to)];
+            for (const item of published) {
+                await driver.publish(to, item);
+            }
+
+            const received = await all.done;
+            // ponytail: one event-loop turn for a duplicate to show
+            await tick();
+            assert.deepEqual(received.map((item) => item.id).sort(), published.map((item) => item.id).sort());
+        });
+
         run('should fan a PUB_SUB message out to every consumer', async (driver) => {
             const to = routing('pubSub');
             const a = collect(1);

@@ -180,6 +180,35 @@ describe('src/module', () => {
         expect(seen[0]?.metadata.delivery).toEqual({ attempt: 2, maxAttempts: 3 });
     });
 
+    it('should consume a namespaced WORK routing through a topic exchange into the shared, retried queue `key`', async () => {
+        const client = new FakeAmqpClient();
+        const routing: MessageRouting = { ...shapes.work, namespace: 'custom' };
+
+        await createDriver(client).consume(routing, () => {});
+        await createDriver(client).publish(routing, message(routing));
+
+        const [consumed] = client.consumes;
+        expect(consumed?.exchange).toEqual({ type: 'topic', name: 'custom' });
+        expect(consumed?.key).toBe('tasks');
+        const { onError, ...options } = consumed?.options ?? {};
+        expect(options).toEqual({
+            prefetchCount: 1,
+            requeueOnFailure: true,
+            queue: 'tasks',
+            retry,
+        });
+        expect(typeof onError).toBe('function');
+
+        const [published] = client.publishes;
+        expect(published?.exchange).toEqual({ type: 'topic', name: 'custom' });
+        expect(published?.key).toBe('tasks');
+        expect(published?.options).toEqual({
+            type: 'execute',
+            messageId: 'msg-1',
+            persistent: true,
+        });
+    });
+
     it('should report a retried WORK message to onRetry and a dropped one to onDrop', async () => {
         const client = new FakeAmqpClient();
         const retried: unknown[] = [];
