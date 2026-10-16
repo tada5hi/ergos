@@ -1,5 +1,5 @@
 {
-    "name": "@ergos/amqp",
+    "name": "ergos-amqp",
     "version": "0.0.0",
     "type": "module",
     "description": "AMQP (RabbitMQ) driver for the ergos message bus, built on amqp-extension.",

@@ -1,6 +1,6 @@
-# @ergos/amqp
+# ergos-amqp
 
-[![npm version](https://badge.fury.io/js/@ergos%2Famqp.svg)](https://npmjs.com/package/@ergos/amqp)
+[![npm version](https://badge.fury.io/js/ergos-amqp.svg)](https://npmjs.com/package/ergos-amqp)
 
 Maps the [ergos](https://npmjs.com/package/ergos) message bus onto RabbitMQ through
 [amqp-extension](https://www.npmjs.com/package/amqp-extension).
@@ -8,14 +8,14 @@ Maps the [ergos](https://npmjs.com/package/ergos) message bus onto RabbitMQ thro
 ## Installation
 
 ```bash
-npm install ergos @ergos/amqp --save
+npm install ergos ergos-amqp --save
 ```
 
 ## Usage
 
 ```ts
 import { MessageBus } from 'ergos';
-import { AmqpMessageBusDriver } from '@ergos/amqp';
+import { AmqpMessageBusDriver } from 'ergos-amqp';
 
 const messageBus = new MessageBus({
     driver: new AmqpMessageBusDriver({

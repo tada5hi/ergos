@@ -3,7 +3,7 @@
     "compilerOptions": {
         "paths": {
             "ergos": ["./packages/ergos/src/index.ts"],
-            "@ergos/amqp": ["./packages/amqp/src/index.ts"]
+            "ergos-amqp": ["./packages/amqp/src/index.ts"]
         }
     }
 }
