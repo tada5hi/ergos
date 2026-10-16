@@ -229,7 +229,7 @@ dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_
 | `type` | `'work'`: each message goes to one consumer (round-robin); with a `namespace`, to every consumer. `'pubSub'`: each message goes to every consumer |
 | `key` | The queue (work) or routing key (pubSub) |
 | `namespace` | Optional. Separates routings with the same key, e.g. an exchange name in the amqp driver |
-| `ordered` | `work` only: one consumer and one handler at a time, in publish order, with failover to another replica |
+| `ordered` | `work` only: one consumer and one handler at a time, in publish order, with failover to another replica. A retried message re-enters at the end of the queue, behind the ones published after it |
 | `queue` | `pubSub` consume only: a durable subscription. Consumers naming the same queue share its messages (each once, retried like `work`); each queue name gets its own copy. Publishers omit it |
 
 ### Consuming
@@ -273,7 +273,9 @@ and `close()`. Every driver keeps the same contract:
 The memory driver keeps amqp's queue semantics: a `work` routing without `namespace` is a queue
 that keeps a message until a consumer takes it, and so is a `pubSub` `queue` once a consumer
 declared it (round-robin across its consumers); any other routing gives each consumer its own copy
-and drops a message nobody consumes (amqp: an exclusive queue per consumer).
+and drops a message nobody consumes (amqp: an exclusive queue per consumer). Unlike amqp, which
+parses each delivery anew, the memory driver hands every consumer the published message's own
+`data` object: a handler must not mutate it.
 
 ### Driver conformance
 
@@ -289,7 +291,9 @@ defineDriverConformance({ describe, it }, () => new MyMessageBusDriver());
 ```
 
 Each case gets a fresh driver and closes it. `MemoryMessageBusDriver` and `AmqpMessageBusDriver`
-run the same suite.
+run the same suite. Every case uses a key of its own; against a real broker, the durable queues the
+`work` and `queue` cases declare are left behind (`close()` deletes no queue), so point it at a
+throwaway vhost.
 
 ## Dispatchers and workers
 

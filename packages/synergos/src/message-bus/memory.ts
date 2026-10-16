@@ -29,6 +29,7 @@ type MemoryQueue = {
  * handlers run on a later microtask and their errors are dropped (there is no
  * retry: attempt 1 of 1). An `ordered` queue runs one handler at a time.
  * ponytail: otherwise no prefetch, a consumer's handlers may overlap.
+ * ponytail: no JSON copy like amqp's; every consumer shares the published `data` object.
  */
 export class MemoryMessageBusDriver implements IMessageBusDriver {
     protected consumers: MemoryConsumer[] = [];

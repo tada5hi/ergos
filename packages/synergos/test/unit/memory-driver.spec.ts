@@ -169,7 +169,7 @@ describe('src/message-bus/memory', () => {
         expect(seen).toEqual(['b', 'b']);
     });
 
-    it('should hand the handler a copy with delivery info, leaving the published message as is', async () => {
+    it('should hand the handler a copy with delivery info, leaving the published metadata as is', async () => {
         const driver = new MemoryMessageBusDriver();
         const seen: Message[] = [];
         await driver.consume(work, (received) => { seen.push(received); });

@@ -130,7 +130,9 @@ A `pubSub` `queue` is a durable fan-out subscription: each service names its own
 `hub-core-authup-events`) and gets its own copy, its replicas share it. Only the consumer passes
 `queue`; the publisher's routing stays `{ type: 'pubSub', key, namespace }` and declares no queue, so
 the two never conflict. The queue keeps messages from the first consume on. Set
-`metadata.persistent: true` on the publisher for them to survive a broker restart.
+`metadata.persistent: true` on the publisher for them to survive a broker restart; a `RemoteWorker`
+drops `persistent` from the events it forwards, so publish such events through a `RemoteDispatcher`
+or `MessageBus.publish()`.
 
 `publish()` resolves once the broker has confirmed the message, and rejects when it refuses
 it or the driver was closed. The driver passes synergos'
@@ -148,6 +150,8 @@ at `retryDelay` and capped at 30 seconds, and reports it to `onRetry`. Once `max
 reached the message is acked and reported to `onDrop`. There is no dead-letter queue.
 
 If the re-publish itself fails, the message is requeued and comes back as a redelivery.
+The re-publish goes to the end of the queue, so on an `ordered` routing a retried message is
+handled after the ones published behind it.
 
 A handler sees `message.metadata.delivery = { attempt, maxAttempts }`: for `work`, the 1-based
 attempt from `x-attempt` and the driver's `maxAttempts` (likewise for a `pubSub` `queue`); for a
