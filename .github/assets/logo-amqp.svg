@@ -1,93 +1,19 @@
 <svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sa-title">
-    <title id="sa-title">@synergos/amqp logo: three components exchanging messages through a RabbitMQ exchange</title>
+    <title id="sa-title">@synergos/amqp logo: a figure eight whose loops, the dispatching side and the worker, cross at a RabbitMQ exchange while a message runs the round trip</title>
 
-    <defs>
-        <linearGradient id="sa-tile" x1="24" y1="24" x2="232" y2="232" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#8B5CF6" stop-opacity="0.16"/>
-            <stop offset="1" stop-color="#14B8A6" stop-opacity="0.16"/>
-        </linearGradient>
-        <linearGradient id="sa-edge" x1="24" y1="24" x2="232" y2="232" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#8B5CF6"/>
-            <stop offset="1" stop-color="#14B8A6"/>
-        </linearGradient>
+    <!-- dispatching side: the command leaves the exchange and comes back as a reply -->
+    <path d="M128 128 C96 76 36 76 36 128 C36 180 96 180 128 128" stroke="#8B5CF6" stroke-width="20" stroke-linecap="round"/>
 
-        <!-- one spoke per component, fading from the component's colour into the bus -->
-        <linearGradient id="sa-spoke-a" x1="128" y1="62" x2="128" y2="128" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#8B5CF6"/>
-            <stop offset="1" stop-color="#F97316"/>
-        </linearGradient>
-        <linearGradient id="sa-spoke-b" x1="185" y1="161" x2="128" y2="128" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#14B8A6"/>
-            <stop offset="1" stop-color="#F97316"/>
-        </linearGradient>
-        <linearGradient id="sa-spoke-c" x1="71" y1="161" x2="128" y2="128" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#0EA5E9"/>
-            <stop offset="1" stop-color="#F97316"/>
-        </linearGradient>
-
-        <linearGradient id="sa-bus" x1="128" y1="106" x2="128" y2="150" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#FB923C"/>
-            <stop offset="1" stop-color="#EA580C"/>
-        </linearGradient>
-    </defs>
-
-    <!-- rounded app-icon tile -->
-    <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#sa-tile)"/>
-    <rect x="8.75" y="8.75" width="238.5" height="238.5" rx="55.25" stroke="url(#sa-edge)" stroke-opacity="0.35" stroke-width="1.5"/>
-
-    <!-- the orbit the components share -->
-    <circle cx="128" cy="128" r="72" stroke="url(#sa-edge)" stroke-opacity="0.3" stroke-width="2" stroke-dasharray="4 8" stroke-linecap="round"/>
-
-    <!-- spokes: every component talks to the bus, never to another component directly -->
-    <path d="M128 62 V128" stroke="url(#sa-spoke-a)" stroke-width="10" stroke-linecap="round"/>
-    <path d="M185 161 L128 128" stroke="url(#sa-spoke-b)" stroke-width="10" stroke-linecap="round"/>
-    <path d="M71 161 L128 128" stroke="url(#sa-spoke-c)" stroke-width="10" stroke-linecap="round"/>
-
-    <!-- messages: a command leaves one component, crosses the bus and reaches the next -->
-    <g>
-        <circle r="10" fill="#FFFFFF" fill-opacity="0.2"/>
-        <circle r="5" fill="#FFFFFF"/>
-        <animateMotion dur="3.6s" repeatCount="indefinite" path="M128 62 L128 128 L185 161"/>
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.12;0.85;1" dur="3.6s" repeatCount="indefinite"/>
-    </g>
-    <g>
-        <circle r="10" fill="#FFFFFF" fill-opacity="0.2"/>
-        <circle r="5" fill="#FFFFFF"/>
-        <animateMotion dur="3.6s" begin="-1.2s" repeatCount="indefinite" path="M185 161 L128 128 L71 161"/>
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.12;0.85;1" dur="3.6s" begin="-1.2s" repeatCount="indefinite"/>
-    </g>
-    <g>
-        <circle r="10" fill="#FFFFFF" fill-opacity="0.2"/>
-        <circle r="5" fill="#FFFFFF"/>
-        <animateMotion dur="3.6s" begin="-2.4s" repeatCount="indefinite" path="M71 161 L128 128 L128 62"/>
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.12;0.85;1" dur="3.6s" begin="-2.4s" repeatCount="indefinite"/>
-    </g>
+    <!-- worker side -->
+    <path d="M128 128 C160 76 220 76 220 128 C220 180 160 180 128 128" stroke="#14B8A6" stroke-width="20" stroke-linecap="round"/>
 
     <!-- the bus is a RabbitMQ exchange: amqp-extension's routing diamond -->
-    <path d="M128 98 L158 128 L128 158 L98 128 Z" fill="url(#sa-bus)" fill-opacity="0.2"/>
-    <path d="M128 108 L148 128 L128 148 L108 128 Z" fill="url(#sa-bus)"/>
-    <circle cx="128" cy="128" r="5" fill="#FFFFFF" fill-opacity="0.85"/>
+    <path d="M128 107 L149 128 L128 149 L107 128 Z" fill="#F97316"/>
+    <circle cx="128" cy="128" r="5.5" fill="#FFFFFF" fill-opacity="0.9"/>
 
-    <!-- components: a tile with a status light -->
-    <g>
-        <rect x="104" y="38" width="48" height="48" rx="14" fill="#8B5CF6" fill-opacity="0.16" stroke="#8B5CF6" stroke-opacity="0.65" stroke-width="2"/>
-        <rect x="114" y="48" width="28" height="28" rx="8" fill="#8B5CF6"/>
-        <circle cx="136" cy="54" r="3.5" fill="#FFFFFF">
-            <animate attributeName="fill-opacity" values="1;0.35;1" dur="3.6s" repeatCount="indefinite"/>
-        </circle>
-    </g>
-    <g>
-        <rect x="161" y="137" width="48" height="48" rx="14" fill="#14B8A6" fill-opacity="0.16" stroke="#14B8A6" stroke-opacity="0.65" stroke-width="2"/>
-        <rect x="171" y="147" width="28" height="28" rx="8" fill="#14B8A6"/>
-        <circle cx="193" cy="153" r="3.5" fill="#FFFFFF">
-            <animate attributeName="fill-opacity" values="1;0.35;1" dur="3.6s" begin="-1.2s" repeatCount="indefinite"/>
-        </circle>
-    </g>
-    <g>
-        <rect x="47" y="137" width="48" height="48" rx="14" fill="#0EA5E9" fill-opacity="0.16" stroke="#0EA5E9" stroke-opacity="0.65" stroke-width="2"/>
-        <rect x="57" y="147" width="28" height="28" rx="8" fill="#0EA5E9"/>
-        <circle cx="79" cy="153" r="3.5" fill="#FFFFFF">
-            <animate attributeName="fill-opacity" values="1;0.35;1" dur="3.6s" begin="-2.4s" repeatCount="indefinite"/>
-        </circle>
-    </g>
+    <!-- a message: command over to the worker, reply back to the dispatcher -->
+    <circle r="7" fill="#FFFFFF" stroke="#6366F1" stroke-opacity="0.35" stroke-width="3">
+        <animateMotion dur="4s" repeatCount="indefinite" path="M128 128 C160 76 220 76 220 128 C220 180 160 180 128 128 C96 76 36 76 36 128 C36 180 96 180 128 128"/>
+        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.9;1" dur="4s" repeatCount="indefinite"/>
+    </circle>
 </svg>
