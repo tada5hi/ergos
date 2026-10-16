@@ -1,23 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { defineScheduledComponent } from '../../src';
-import { FakeLogger } from './fakes/logger';
 
 const wait = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 describe('src/component/scheduled', () => {
-    it('should never reject start() when the first pass fails, and log it', async () => {
-        const logger = new FakeLogger();
+    it('should never reject start() when the first pass fails, and report it to onError', async () => {
+        const errors: unknown[] = [];
+        const failure = new Error('x');
         const c = defineScheduledComponent({
-            name: 'sweeper',
             schedule: '0 0 1 1 *',
-            logger,
-            run: async () => { throw new Error('x'); },
+            hooks: { onError: (error) => { errors.push(error); } },
+            run: async () => { throw failure; },
         });
         await expect(c.start()).resolves.toBeUndefined();
         expect(c.status().lastSuccessAt).toBeUndefined();
         expect(c.status().runningSince).toBeUndefined();
-        expect(logger.calls.map((call) => call.level)).toEqual(['warn', 'warn']);
-        expect(logger.calls[0]?.message).toContain('sweeper');
+        expect(errors).toEqual([failure]);
+        await c.stop();
+    });
+
+    it('should still resolve start() when onError throws', async () => {
+        const c = defineScheduledComponent({
+            schedule: '0 0 1 1 *',
+            hooks: { onError: () => { throw new Error('hook'); } },
+            run: async () => { throw new Error('x'); },
+        });
+        await expect(c.start()).resolves.toBeUndefined();
         await c.stop();
     });
 

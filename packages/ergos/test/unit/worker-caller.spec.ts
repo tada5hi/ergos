@@ -7,7 +7,6 @@ import {
 } from '../../src';
 import type { Message, MessageRouting } from '../../src';
 import { TestComponent } from './fakes/component';
-import { FakeLogger } from './fakes/logger';
 
 const consumeRouting: MessageRouting = { type: 'work', key: 'commands' };
 const publishRouting: MessageRouting = { type: 'work', key: 'replies' };
@@ -15,13 +14,11 @@ const publishRouting: MessageRouting = { type: 'work', key: 'replies' };
 function setup() {
     const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
     const component = new TestComponent();
-    const logger = new FakeLogger();
     const dispatcher = new DispatchCaller({ routing: consumeRouting, messageBus });
 
     return {
         messageBus, 
         component, 
-        logger, 
         dispatcher,
     };
 }
@@ -98,24 +95,42 @@ describe('src/caller/worker', () => {
         expect(replies[0]?.metadata).not.toHaveProperty('persistent');
     });
 
-    it('should warn when a child event has nowhere to go', async () => {
+    it('should report a child event with nowhere to go to onUnrouted', async () => {
         const {
-            messageBus, 
-            component, 
-            logger, 
+            messageBus,
+            component,
+            dispatcher,
+        } = setup();
+        const unrouted: unknown[][] = [];
+        const worker = new WorkerCaller(component, {
+            consumeRouting,
+            messageBus,
+            hooks: { onUnrouted: (...args) => { unrouted.push(args); } },
+        });
+        await worker.start();
+        await dispatcher.call('execute', { id: 'a' }, { correlationId: 'c' });
+
+        expect(component.handled).toEqual(['a']);
+        expect(unrouted).toHaveLength(1);
+        expect(unrouted[0]?.[0]).toBe('executionFinished');
+        expect(unrouted[0]?.[1]).toEqual({ id: 'a' });
+        expect(unrouted[0]?.[2]).toMatchObject({ correlationId: 'c' });
+    });
+
+    it('should settle the command when onUnrouted throws', async () => {
+        const {
+            messageBus,
+            component,
             dispatcher,
         } = setup();
         const worker = new WorkerCaller(component, {
-            consumeRouting, 
-            messageBus, 
-            logger, 
+            consumeRouting,
+            messageBus,
+            hooks: { onUnrouted: () => { throw new Error('hook'); } },
         });
         await worker.start();
-        await dispatcher.call('execute', { id: 'a' }, {});
 
-        expect(component.handled).toEqual(['a']);
-        expect(logger.messages('warn')).toHaveLength(1);
-        expect(logger.messages('warn')[0]).toContain('executionFinished');
+        await expect(dispatcher.call('execute', { id: 'a' }, {})).resolves.toBeUndefined();
     });
 
     it('should resolve an unknown command silently (no retry loop)', async () => {

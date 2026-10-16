@@ -2,10 +2,10 @@ import { ClientError, resolveAttempt } from 'amqp-extension';
 import type { ConsumeMessage } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
 import { AmqpMessageBusDriver } from '../../src';
+import type { AmqpMalformedMessage, AmqpMessageBusDriverHooks } from '../../src';
 import { buildMessage } from 'ergos';
 import type { Message, MessageRouting } from 'ergos';
 import { FakeAmqpClient } from './fakes/amqp-client';
-import { FakeLogger } from './fakes/logger';
 import { hubWireFixture } from './fixtures/hub-wire';
 
 const shapes = {
@@ -32,17 +32,22 @@ const message = (routing: MessageRouting) => buildMessage({
     metadata: { routing, timestamp: 1_700_000_000_000 },
 });
 
-function createDriver(client = new FakeAmqpClient(), logger?: FakeLogger) {
+function createDriver(client = new FakeAmqpClient(), hooks?: AmqpMessageBusDriverHooks) {
     return new AmqpMessageBusDriver({
-        client, 
-        logger, 
-        defaultTopicExchange: 'FLAME', 
+        client,
+        hooks,
+        defaultTopicExchange: 'FLAME',
     });
 }
 
-function toConsumeMessage(type: string, messageId: string): ConsumeMessage {
+function toConsumeMessage(
+    type: string,
+    messageId: string,
+    content: Buffer = Buffer.from(JSON.stringify(message(shapes.work))),
+    attempt = 2,
+): ConsumeMessage {
     return {
-        content: Buffer.from('{}'),
+        content,
         fields: {
             deliveryTag: 1,
             redelivered: false,
@@ -53,7 +58,7 @@ function toConsumeMessage(type: string, messageId: string): ConsumeMessage {
         properties: {
             contentType: undefined,
             contentEncoding: undefined,
-            headers: undefined,
+            headers: { 'x-attempt': attempt },
             deliveryMode: 2,
             priority: undefined,
             correlationId: undefined,
@@ -100,7 +105,7 @@ describe('src/module', () => {
                 ...expected.options,
                 ...(isWork ? { retry } : {}),
             });
-            // logs retries and drops (hub's driver did)
+            // reports retries and drops to the hooks (hub's driver logged them)
             expect(typeof onError).toBe(isWork ? 'function' : 'undefined');
         });
 
@@ -140,18 +145,50 @@ describe('src/module', () => {
         expect(client.consumes[0]?.options).toMatchObject({ prefetchCount: 4, retry: { maxAttempts: 3, delay: 10 } });
     });
 
-    it('should log a retried WORK message and, at error level, a dropped one', async () => {
+    it('should report a retried WORK message to onRetry and a dropped one to onDrop', async () => {
         const client = new FakeAmqpClient();
-        const logger = new FakeLogger();
-        await createDriver(client, logger).consume(shapes.work, () => {});
+        const retried: unknown[] = [];
+        const dropped: unknown[] = [];
+        await createDriver(client, {
+            onRetry: (failure) => { retried.push(failure); },
+            onDrop: (failure) => { dropped.push(failure); },
+        }).consume(shapes.work, () => {});
         const { onError } = client.consumes[0]?.options ?? {};
         if (!onError) throw new Error('no onError');
 
-        await onError(new Error('boom'), toConsumeMessage('execute', 'msg-1'));
-        await onError(ClientError.attemptsExhausted('execute'), toConsumeMessage('execute', 'msg-1'));
+        const failure = new Error('boom');
+        await onError(failure, toConsumeMessage('execute', 'msg-1'));
+        await onError(ClientError.attemptsExhausted('execute', failure), toConsumeMessage('execute', 'msg-1', undefined, 5));
 
-        expect(logger.messages('warn')).toEqual(['Retrying message execute (msg-1) in tasks.']);
-        expect(logger.messages('error')).toEqual(['Dropping message execute (msg-1) in tasks after 5 attempts.']);
+        expect(retried).toEqual([{
+            message: message(shapes.work),
+            routing: shapes.work,
+            attempt: 2,
+            error: failure,
+        }]);
+        expect(dropped).toEqual([{
+            message: message(shapes.work),
+            routing: shapes.work,
+            attempt: 5,
+            error: failure,
+        }]);
+    });
+
+    it('should report undecodable content in onError to onMalformed, not onRetry', async () => {
+        const client = new FakeAmqpClient();
+        const retried: unknown[] = [];
+        const malformed: unknown[] = [];
+        await createDriver(client, {
+            onRetry: (failure) => { retried.push(failure); },
+            onMalformed: (delivery) => { malformed.push(delivery); },
+        }).consume(shapes.work, () => {});
+        const { onError } = client.consumes[0]?.options ?? {};
+        if (!onError) throw new Error('no onError');
+
+        await onError(new Error('boom'), toConsumeMessage('execute', 'msg-1', Buffer.from('{}')));
+
+        expect(retried).toEqual([]);
+        expect(malformed).toHaveLength(1);
     });
 
     it('should hand a parsed payload to the handler', async () => {
@@ -172,17 +209,31 @@ describe('src/module', () => {
             .rejects.toThrow('boom');
     });
 
-    it('should drop (ack) an unparsable or malformed message with a warning', async () => {
+    it('should drop (ack) an unparsable or malformed message, reporting it to onMalformed', async () => {
         const client = new FakeAmqpClient();
-        const logger = new FakeLogger();
+        const malformed: AmqpMalformedMessage[] = [];
         const seen: Message[] = [];
-        await createDriver(client, logger).consume(shapes.work, (received) => { seen.push(received); });
+        await createDriver(client, { onMalformed: (delivery) => { malformed.push(delivery); } })
+            .consume(shapes.work, (received) => { seen.push(received); });
 
-        await client.consumes[0]?.handler({ content: Buffer.from('{nope') });
-        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify({ id: 1 })) });
+        const unparsable = Buffer.from('{nope');
+        const shapeless = Buffer.from(JSON.stringify({ id: 1 }));
+        await client.consumes[0]?.handler({ content: unparsable });
+        await client.consumes[0]?.handler({ content: shapeless });
 
         expect(seen).toEqual([]);
-        expect(logger.messages('warn')).toHaveLength(2);
+        expect(malformed).toHaveLength(2);
+        expect(malformed[0]).toMatchObject({ routing: shapes.work, content: unparsable });
+        expect(malformed[0]?.error).toBeInstanceOf(SyntaxError);
+        expect(malformed[1]).toEqual({ routing: shapes.work, content: shapeless });
+    });
+
+    it('should still ack a malformed message when onMalformed throws', async () => {
+        const client = new FakeAmqpClient();
+        await createDriver(client, { onMalformed: () => { throw new Error('hook'); } })
+            .consume(shapes.work, () => {});
+
+        await expect(client.consumes[0]?.handler({ content: Buffer.from('{nope') })).resolves.toBeUndefined();
     });
 
     it('should serialize errors in the body', async () => {

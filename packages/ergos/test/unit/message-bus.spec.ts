@@ -7,7 +7,6 @@ import {
     serializeMessage,
 } from '../../src';
 import type { Message, MessageRouting } from '../../src';
-import { FakeLogger } from './fakes/logger';
 
 const routing: MessageRouting = { type: 'work', key: 'jobs' };
 
@@ -115,24 +114,73 @@ describe('src/message-bus', () => {
             .resolves.toBe(true);
     });
 
-    it('should log and rethrow a failing handler', async () => {
-        const logger = new FakeLogger();
-        const bus = new MessageBus({ driver: new MemoryMessageBusDriver(), logger });
-        const consumer = await bus.consumeAny(routing, () => { throw new Error('x'); });
+    it('should rethrow a failing handler after reporting it to onError', async () => {
+        const errors: unknown[][] = [];
+        const failure = new Error('x');
+        const bus = new MessageBus({
+            driver: new MemoryMessageBusDriver(),
+            hooks: { onError: (...args) => { errors.push(args); } },
+        });
+        const consumer = await bus.consumeAny(routing, () => { throw failure; });
+        const message = buildMessage({ type: 'run', metadata: { routing } });
 
-        await expect(bus.publish(buildMessage({ type: 'run', metadata: { routing } })))
-            .rejects.toThrow('x');
-        expect(logger.messages('error')).toHaveLength(1);
+        await expect(bus.publish(message)).rejects.toThrow('x');
+        expect(errors).toEqual([[failure, message, routing]]);
 
         await consumer.cancel();
         await expect(bus.publish(buildMessage({ type: 'run', metadata: { routing } })))
             .resolves.toBe(false);
     });
 
-    it('should not log a publish when logging is off', async () => {
-        const logger = new FakeLogger();
-        const bus = new MessageBus({ driver: new MemoryMessageBusDriver(), logger });
-        await bus.publish(buildMessage({ type: 'run', metadata: { routing } }), { logging: false });
-        expect(logger.calls).toEqual([]);
+    it('should report publish, consume and unhandled messages to their hooks', async () => {
+        const calls: [string, Message, MessageRouting?][] = [];
+        const bus = new MessageBus({
+            driver: new MemoryMessageBusDriver(),
+            hooks: {
+                onPublish: (message) => { calls.push(['publish', message]); },
+                onConsume: (message, consumeRouting) => { calls.push(['consume', message, consumeRouting]); },
+                onUnhandled: (message, consumeRouting) => { calls.push(['unhandled', message, consumeRouting]); },
+            },
+        });
+        await bus.consume(routing, { run: () => {} });
+
+        const run = buildMessage({ type: 'run', metadata: { routing } });
+        const other = buildMessage({ type: 'other', metadata: { routing } });
+        await bus.publish(run);
+        await bus.publish(other);
+
+        expect(calls).toEqual([
+            ['publish', run],
+            ['consume', run, routing],
+            ['publish', other],
+            ['consume', other, routing],
+            ['unhandled', other, routing],
+        ]);
+    });
+
+    it('should keep every outcome when a hook throws or rejects', async () => {
+        const fail = () => { throw new Error('hook'); };
+        const bus = new MessageBus({
+            driver: new MemoryMessageBusDriver(),
+            hooks: {
+                onPublish: fail,
+                onConsume: () => Promise.reject(new Error('hook')),
+                onUnhandled: fail,
+                onError: fail,
+            },
+        });
+        const handled: string[] = [];
+        await bus.consume(routing, {
+            run: (message) => { handled.push(message.type); },
+            boom: () => { throw new Error('handler'); },
+        });
+
+        // delivered and acked despite onPublish / onConsume
+        await expect(bus.publish(buildMessage({ type: 'run', metadata: { routing } }))).resolves.toBe(true);
+        expect(handled).toEqual(['run']);
+        // still acked (not turned into a retry) despite onUnhandled
+        await expect(bus.publish(buildMessage({ type: 'nope', metadata: { routing } }))).resolves.toBe(true);
+        // the handler's own error, not the hook's
+        await expect(bus.publish(buildMessage({ type: 'boom', metadata: { routing } }))).rejects.toThrow('handler');
     });
 });

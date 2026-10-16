@@ -1,10 +1,11 @@
+import { invokeHook } from '../hook';
 import type {
     IMessageBus,
     IMessageBusConsumer,
     IMessageBusDriver,
     Message,
+    MessageBusHooks,
     MessageBusOptions,
-    MessageBusPublishOptions,
     MessageHandler,
     MessageHandlers,
     MessageRouting,
@@ -13,17 +14,15 @@ import type {
 export class MessageBus implements IMessageBus {
     protected driver: IMessageBusDriver;
 
-    protected logger?: MessageBusOptions['logger'];
+    protected hooks?: MessageBusHooks;
 
     constructor(options: MessageBusOptions) {
         this.driver = options.driver;
-        this.logger = options.logger;
+        this.hooks = options.hooks;
     }
 
-    publish(message: Message, options: MessageBusPublishOptions = {}): Promise<boolean> {
-        if (options.logging ?? true) {
-            this.logger?.debug(`Publishing queue message ${message.type} in ${message.metadata.routing.key}`);
-        }
+    publish(message: Message): Promise<boolean> {
+        invokeHook(this.hooks, 'onPublish', message);
 
         return this.driver.publish(message.metadata.routing, message);
     }
@@ -34,20 +33,20 @@ export class MessageBus implements IMessageBus {
 
     consume(routing: MessageRouting, handlers: MessageHandlers): Promise<IMessageBusConsumer> {
         return this.driver.consume(routing, async (message) => {
-            this.logger?.debug(`Consuming queue message ${message.type} in ${routing.key}`);
+            invokeHook(this.hooks, 'onConsume', message, routing);
 
             // own keys only: a type such as 'toString' must not hit Object.prototype
             const handler = (Object.hasOwn(handlers, message.type) ? handlers[message.type] : undefined) ??
                 handlers['*'];
             if (!handler) {
-                this.logger?.debug(`No queue handler to consume message ${message.type} in ${routing.key}`);
+                invokeHook(this.hooks, 'onUnhandled', message, routing);
                 return;
             }
 
             try {
                 await handler(message);
             } catch (e) {
-                this.logger?.error(e);
+                invokeHook(this.hooks, 'onError', e, message, routing);
                 throw e;
             }
         });

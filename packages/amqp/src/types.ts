@@ -3,7 +3,7 @@ import type {
     Exchange,
     PublishOptions,
 } from 'amqp-extension';
-import type { ILogger, IMessageBusConsumer } from 'ergos';
+import type { IMessageBusConsumer, Message, MessageRouting } from 'ergos';
 
 export type AmqpDeliveryHandler = (message: { content: Uint8Array }) => Promise<void>;
 
@@ -17,12 +17,55 @@ export interface IAmqpClient {
     close(): Promise<void>;
 }
 
+/**
+ * A WORK message whose handler failed.
+ */
+export type AmqpFailedMessage = {
+    message: Message,
+    routing: MessageRouting,
+    /**
+     * The attempt that failed (1-based, from the x-attempt header).
+     */
+    attempt: number,
+    /**
+     * The handler's error; undefined for a redelivery of a message whose consumer died.
+     */
+    error: unknown,
+};
+
+/**
+ * A delivery that is not a message: not JSON (error is the parse error), or JSON
+ * without the message shape (error is undefined). It is dropped (acked).
+ */
+export type AmqpMalformedMessage = {
+    routing: MessageRouting,
+    content: Uint8Array,
+    error?: unknown,
+};
+
+/**
+ * Observers (amqp-extension itself does not log). A hook that throws is ignored
+ * (see invokeHook in ergos).
+ */
+export type AmqpMessageBusDriverHooks = {
+    /**
+     * A failed WORK message was re-published for another attempt (or requeued
+     * when the re-publish failed).
+     */
+    onRetry?(failure: AmqpFailedMessage): void,
+    /**
+     * A WORK message was dropped (acked) after maxAttempts.
+     */
+    onDrop?(failure: AmqpFailedMessage): void,
+    onMalformed?(delivery: AmqpMalformedMessage): void,
+};
+
 export type AmqpMessageBusDriverOptions = ({ connectionString: string } | { client: IAmqpClient }) & {
     /**
      * Name of the topic exchange for a PUB_SUB routing without namespace.
      */
     defaultTopicExchange: string,
-    logger?: ILogger,
+    hooks?: AmqpMessageBusDriverHooks,
     /**
      * Delivery attempts of a WORK message before it is dropped (default: 5).
      */

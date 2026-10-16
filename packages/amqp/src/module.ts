@@ -3,22 +3,27 @@ import {
     ErrorCode,
     ExchangeType,
     isClientError,
+    resolveAttempt,
 } from 'amqp-extension';
 import type { ConsumeOptions, QueueOptions } from 'amqp-extension';
 import {
     MessageRoutingType,
+    invokeHook,
     isMessage,
     serializeMessage,
 } from 'ergos';
 import type {
-    ILogger,
     IMessageBusConsumer,
     IMessageBusDriver,
     Message,
     MessageHandler,
     MessageRouting,
 } from 'ergos';
-import type { AmqpMessageBusDriverOptions, IAmqpClient } from './types';
+import type {
+    AmqpMessageBusDriverHooks,
+    AmqpMessageBusDriverOptions,
+    IAmqpClient,
+} from './types';
 
 /**
  * Maps the message bus onto amqp-extension. WORK routings go through the default
@@ -33,11 +38,11 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
 
     protected connectionString: string | undefined;
 
-    protected logger?: ILogger;
+    protected hooks?: AmqpMessageBusDriverHooks;
 
     constructor(options: AmqpMessageBusDriverOptions) {
         this.options = options;
-        this.logger = options.logger;
+        this.hooks = options.hooks;
         if ('client' in options) {
             this.clientInstance = options.client;
         } else {
@@ -82,31 +87,44 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
         if (isWork) {
             const maxAttempts = this.options.maxAttempts ?? 5;
             options.retry = { maxAttempts, delay: this.options.retryDelay ?? 1000 };
-            // amqp-extension does not log: the handler's own error is logged by MessageBus.
+            // The handler's own error reaches MessageBus' onError hook first.
             // ponytail: a crashed redelivery's retries are not reported by amqp-extension, only its drop.
             options.onError = (error, input) => {
-                const { type, messageId } = input.properties;
+                const attempt = resolveAttempt(input.properties);
                 if (isClientError(error) && error.code === ErrorCode.ATTEMPTS_EXHAUSTED) {
-                    this.logger?.error(`Dropping message ${type} (${messageId}) in ${routing.key} after ${maxAttempts} attempts.`);
+                    if (!this.hooks?.onDrop) return;
+
+                    const message = this.decode(routing, input.content);
+                    if (message) {
+                        invokeHook(this.hooks, 'onDrop', {
+                            message,
+                            routing,
+                            attempt,
+                            error: error.cause,
+                        });
+                    }
+
                     return;
                 }
 
-                this.logger?.warn(`Retrying message ${type} (${messageId}) in ${routing.key}.`);
+                if (!this.hooks?.onRetry) return;
+
+                const message = this.decode(routing, input.content);
+                if (message) {
+                    invokeHook(this.hooks, 'onRetry', {
+                        message,
+                        routing,
+                        attempt,
+                        error,
+                    });
+                }
             };
         }
 
         return this.resolveExchange(routing).consume(routing.key, options, {
             $any: async (input) => {
-                let message: unknown;
-                try {
-                    message = JSON.parse(new TextDecoder().decode(input.content));
-                } catch {
-                    this.logger?.warn(`Could not parse message in ${routing.key}.`);
-                    return;
-                }
-
-                if (!isMessage(message)) {
-                    this.logger?.warn(`Dropping malformed message in ${routing.key}.`);
+                const message = this.decode(routing, input.content);
+                if (!message) {
                     return;
                 }
 
@@ -120,6 +138,30 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
         this.clientInstance = undefined;
         this.connectionString = undefined;
         await client?.close();
+    }
+
+    /**
+     * The message in a delivery, or undefined (reported to onMalformed) when it is none.
+     */
+    protected decode(routing: MessageRouting, content: Uint8Array): Message | undefined {
+        let value: unknown;
+        try {
+            value = JSON.parse(new TextDecoder().decode(content));
+        } catch (error) {
+            invokeHook(this.hooks, 'onMalformed', {
+                routing, 
+                content, 
+                error, 
+            });
+            return undefined;
+        }
+
+        if (!isMessage(value)) {
+            invokeHook(this.hooks, 'onMalformed', { routing, content });
+            return undefined;
+        }
+
+        return value;
     }
 
     /**
