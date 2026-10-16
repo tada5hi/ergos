@@ -1,5 +1,5 @@
 {
-    "name": "ergos-root",
+    "name": "synergos-root",
     "private": true,
     "version": "0.0.0",
     "type": "module",
@@ -11,7 +11,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/tada5hi/ergos.git"
+        "url": "https://github.com/tada5hi/synergos.git"
     },
     "workspaces": [
         "packages/*"

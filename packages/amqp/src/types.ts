@@ -3,7 +3,7 @@ import type {
     Exchange,
     PublishOptions,
 } from 'amqp-extension';
-import type { IMessageBusConsumer, Message, MessageRouting } from 'ergos';
+import type { IMessageBusConsumer, Message, MessageRouting } from 'synergos';
 
 export type AmqpDeliveryHandler = (message: { content: Uint8Array }) => Promise<void>;
 
@@ -45,7 +45,7 @@ export type AmqpMalformedMessage = {
 
 /**
  * Observers (amqp-extension itself does not log). A hook that throws is ignored
- * (see invokeHook in ergos).
+ * (see invokeHook in synergos).
  */
 export type AmqpMessageBusDriverHooks = {
     /**

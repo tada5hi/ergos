@@ -1,16 +1,16 @@
-# ergos
+# synergos
 
-[![npm version](https://badge.fury.io/js/ergos.svg)](https://npmjs.com/package/ergos)
+[![npm version](https://badge.fury.io/js/synergos.svg)](https://npmjs.com/package/synergos)
 
 Components with a `start` / `stop` / `status` lifecycle and optional command handlers,
 scheduled background jobs, and the message bus that routes commands and replies between them.
 
-For an AMQP (RabbitMQ) driver, see [`ergos-amqp`](https://npmjs.com/package/ergos-amqp).
+For an AMQP (RabbitMQ) driver, see [`@synergos/amqp`](https://npmjs.com/package/@synergos/amqp).
 
 ## Installation
 
 ```bash
-npm install ergos --save
+npm install synergos --save
 ```
 
 ## Component
@@ -21,8 +21,8 @@ A `Component` maps command keys to handlers. A handler may emit child events thr
 resolves silently.
 
 ```ts
-import { Component } from 'ergos';
-import type { ComponentMetadata } from 'ergos';
+import { Component } from 'synergos';
+import type { ComponentMetadata } from 'synergos';
 
 type EventMap = {
     build: [{ id: string }, ComponentMetadata],
@@ -46,7 +46,7 @@ class Builder extends Component<EventMap> {
 ## Scheduled component
 
 ```ts
-import { defineScheduledComponent } from 'ergos';
+import { defineScheduledComponent } from 'synergos';
 
 const cleaner = defineScheduledComponent({
     schedule: '* * * * *', // node-cron
@@ -69,7 +69,7 @@ import {
     MemoryMessageBusDriver,
     MessageBus,
     WorkerCaller,
-} from 'ergos';
+} from 'synergos';
 
 const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
 

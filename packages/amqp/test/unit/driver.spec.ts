@@ -3,8 +3,8 @@ import type { ConsumeMessage } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
 import { AmqpMessageBusDriver } from '../../src';
 import type { AmqpMalformedMessage, AmqpMessageBusDriverHooks } from '../../src';
-import { buildMessage } from 'ergos';
-import type { Message, MessageRouting } from 'ergos';
+import { buildMessage } from 'synergos';
+import type { Message, MessageRouting } from 'synergos';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { hubWireFixture } from './fixtures/hub-wire';
 
