@@ -5,7 +5,7 @@
 Components with a `start` / `stop` / `status` lifecycle and optional command handlers,
 scheduled background jobs, and the message bus that routes commands and replies between them.
 
-For an AMQP (RabbitMQ) driver, see [`@ergos/amqp`](https://npmjs.com/package/@ergos/amqp).
+For an AMQP (RabbitMQ) driver, see [`ergos-amqp`](https://npmjs.com/package/ergos-amqp).
 
 ## Installation
 

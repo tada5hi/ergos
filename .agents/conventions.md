@@ -23,7 +23,7 @@ The three `@tada5hi/*` config packages are the source of truth for style, TS, an
 - `npm run lint:fix` auto-fixes most style violations — run it before hand-editing formatting.
 - Never edit `dist/` — it is generated and git-ignored.
 - Never hand-edit `.release-please-manifest.json` or the versions in `packages/*/package.json`; release-please owns them.
-- `node-cron` is the only runtime dependency of `ergos`; it must never depend on amqp-extension. Transport-specific code goes in its own package (`@ergos/amqp`), which takes its transport as a real dependency and `ergos` as a peer + dev dependency at the workspace version. Shared tooling belongs in the root `devDependencies`.
+- `node-cron` is the only runtime dependency of `ergos`; it must never depend on amqp-extension. Transport-specific code goes in its own package (`ergos-amqp`), which takes its transport as a real dependency and `ergos` as a peer + dev dependency at the workspace version. Shared tooling belongs in the root `devDependencies`.
 - Regenerate `package-lock.json` with a plain `npm install` — never `--package-lock-only` (drops other platforms' optional dependencies) or `--force`.
 - Contracts carry an `I` prefix and live in `types.ts`; classes `implements` them, and dependents take the contract (`IMessageBus`), not the class. No `as any`; a cast only where nothing can check the type (the wire boundary in the worker caller).
 - No logger: observable events are optional typed hooks on a `hooks` option (`on*`), declared in `types.ts` and called through `invokeHook`, which ignores a hook that throws or rejects. A hook must never change an outcome (ack vs. retry, resolve vs. reject).
@@ -73,20 +73,20 @@ Commits follow **[Conventional Commits](https://www.conventionalcommits.org)** �
 
 ## TypeScript
 
-- Root `tsconfig.build.json` extends `@tada5hi/tsconfig`; local overrides: `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `noEmit: true`, `allowImportingTsExtensions: true`. Root `tsconfig.json` adds `paths` mapping `ergos` / `@ergos/amqp` to their `src`.
+- Root `tsconfig.build.json` extends `@tada5hi/tsconfig`; local overrides: `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `noEmit: true`, `allowImportingTsExtensions: true`. Root `tsconfig.json` adds `paths` mapping `ergos` / `ergos-amqp` to their `src`.
 - Per package: `tsconfig.build.json` (src only, no paths — resolves siblings through `node_modules`/`dist`, so nx builds `ergos` first) backs `build:types`; `tsconfig.json` (src + test, paths-mapped) backs `typecheck`.
 - `moduleResolution: bundler` means imports are written without file extensions and resolved by tsdown; do not add `.js` extensions to relative imports.
 - Declarations are emitted by tsdown (`dts: true`), not by `tsc`.
 
 ## Build Output
 
-`npm run build` runs each package's `build:types` (`tsc --noEmit`) then `build:js` (tsdown), which writes `packages/<pkg>/dist/index.mjs`, `index.d.mts` and `index.mjs.map`. `dist/` is git-ignored and, with README and LICENSE, the only thing published to npm. In `@ergos/amqp`'s bundle, `ergos` and `amqp-extension` stay external imports.
+`npm run build` runs each package's `build:types` (`tsc --noEmit`) then `build:js` (tsdown), which writes `packages/<pkg>/dist/index.mjs`, `index.d.mts` and `index.mjs.map`. `dist/` is git-ignored and, with README and LICENSE, the only thing published to npm. In `ergos-amqp`'s bundle, `ergos` and `amqp-extension` stay external imports.
 
 ## Release Process
 
 Automated by `.github/workflows/release.yml` on every push to `master`:
 
-1. **release-please** (`googleapis/release-please-action@v5`, monorepo mode) opens or updates a release PR that bumps each changed package's version, updates its `CHANGELOG.md`, and syncs `.release-please-manifest.json`. The `node-workspace` plugin (`updatePeerDependencies: true`) bumps `@ergos/amqp`'s `ergos` range along with it.
+1. **release-please** (`googleapis/release-please-action@v5`, monorepo mode) opens or updates a release PR that bumps each changed package's version, updates its `CHANGELOG.md`, and syncs `.release-please-manifest.json`. The `node-workspace` plugin (`updatePeerDependencies: true`) bumps `ergos-amqp`'s `ergos` range along with it.
 2. Merging that PR creates one git tag per released package (component-prefixed, e.g. `ergos-v0.1.0`, `amqp-v0.1.0`) and GitHub releases.
 3. On that same run, `releases_created == 'true'` gates checkout → install → build → **publish** via `tada5hi/monoship@v2`, which publishes every workspace package whose version is not yet on npm.
 
