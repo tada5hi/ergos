@@ -228,7 +228,9 @@ move to the new names.
   rarely matters. Interchangeable means the *dispatch* side, not who owns lifecycles.
 - Local forwarded events are not cleaned: no transport added `attempt` / `timestamp` /
   `persistent` / `routing`, so there is nothing to strip. The metadata the caller passed is kept.
-- `RemoteWorker` passes an inbound command's metadata through unchanged; it does not invent a
+- `RemoteWorker` passes an inbound command's metadata through unchanged — including
+  `metadata.attempt`, which `@synergos/amqp` sets on consume since #11, so a handler sees its
+  delivery attempt; it does not invent a
   `correlationId` for a command that has none (nobody could match a fresh one).
 - Source layout is the builder's: e.g. `src/dispatcher/`, `src/worker/`, with the lifecycle helper
   and wire codec not re-exported from `src/index.ts`.
