@@ -116,7 +116,7 @@ Each `MessageRouting` maps onto an exchange and a queue:
 |---|---|---|---|---|
 | `{ type: 'work', key }` | Default (direct) exchange | Durable queue named `key`, shared by all consumers | yes | yes |
 | `{ type: 'work', key, ordered: true }` | Default (direct) exchange | As above, with `x-single-active-consumer` | yes | yes |
-| `{ type: 'work', key, namespace }` | Default (direct) exchange | Durable queue named `namespace/key`, shared by all consumers | yes | yes |
+| `{ type: 'work', key, namespace }` | Default (direct) exchange | Durable queue named `namespace/key` (a `/` in `namespace` is rejected), shared by all consumers | yes | yes |
 | `{ type: 'pubSub', key }` | Topic exchange `namespace`, else `defaultTopicExchange` | Exclusive temporary queue per consumer, bound to `key` | no | no |
 | `{ type: 'pubSub', key, queue }` (consume) | As above | Durable queue named `queue`, bound to `key`, shared by the consumers naming it | no | yes |
 

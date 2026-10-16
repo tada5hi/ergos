@@ -195,6 +195,14 @@ export function defineDriverConformance(
             await assert.rejects(driver.consume(to, () => {}));
         });
 
+        run('should reject a WORK namespace containing a slash', async (driver) => {
+            // amqp names the queue namespace/key: 'a/b' + 'c' and 'a' + 'b/c' would share one
+            const to: MessageRouting = { ...routing('work'), namespace: 'conformance/a' };
+
+            await assert.rejects(driver.publish(to, message(to)), TypeError);
+            await assert.rejects(driver.consume(to, () => {}), TypeError);
+        });
+
         run('should run one handler at a time, in publish order, on an ordered WORK routing', async (driver) => {
             const to = routing('work', true);
             const types = ['a', 'b', 'c', 'd', 'e'];

@@ -1,4 +1,5 @@
 import { MessageRoutingType } from './constants';
+import { assertMessageRouting } from './helpers';
 import type {
     IMessageBusConsumer,
     IMessageBusDriver,
@@ -42,6 +43,7 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         if (this.closed) {
             throw new Error('The memory message bus driver was closed.');
         }
+        assertMessageRouting(routing);
 
         // amqp: a publish declares no queue, so `queue` is a consumer's option only
         const queue = this.resolveQueue({ ...routing, queue: undefined });
@@ -69,6 +71,7 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         if (this.closed) {
             throw new Error('The memory message bus driver was closed.');
         }
+        assertMessageRouting(routing);
 
         const consumer: MemoryConsumer = {
             routing,

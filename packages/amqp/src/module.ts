@@ -8,6 +8,7 @@ import {
 import type { ConsumeOptions, QueueOptions } from 'amqp-extension';
 import {
     MessageRoutingType,
+    assertMessageRouting,
     invokeHook,
     isMessage,
     serializeMessage,
@@ -188,9 +189,10 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
     /**
      * The queue of a WORK routing (publisher and consumer both declare it, so it keeps
      * messages before the first consume), else the routing key.
-     * ponytail: namespace `a/b` + key `c` and namespace `a` + key `b/c` share a queue.
+     * assertMessageRouting keeps a '/' out of the namespace, so no two routings share a queue.
      */
     protected resolveKey(routing: MessageRouting): string {
+        assertMessageRouting(routing);
         return routing.type === MessageRoutingType.WORK && routing.namespace ?
             `${routing.namespace}/${routing.key}` :
             routing.key;
