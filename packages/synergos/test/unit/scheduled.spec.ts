@@ -41,9 +41,9 @@ describe('src/component/scheduled', () => {
         });
         const started = c.start();
         expect(c.status().runningSince).toBeTypeOf('number');
-        await c.stop();
+        const stopped = c.stop();
         firstPass.resolve();
-        await started;
+        await Promise.all([started, stopped]);
         await wait(1500);
         expect(passes).toBe(1);
     });
@@ -70,6 +70,20 @@ describe('src/component/scheduled', () => {
 
         expect(passes).toBe(1);
         expect(maxRunning).toBe(1);
+        await c.stop();
+    });
+
+    it('should start again after stop', async () => {
+        let passes = 0;
+        const c = defineScheduledComponent({
+            schedule: '0 0 1 1 *',
+            runOnStart: true,
+            run: async () => { passes++; },
+        });
+        await c.start();
+        await c.stop();
+        await c.start();
+        expect(passes).toBe(2);
         await c.stop();
     });
 
