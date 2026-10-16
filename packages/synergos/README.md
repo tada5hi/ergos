@@ -226,6 +226,7 @@ dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_
 | `key` | The queue (work) or routing key (pubSub) |
 | `namespace` | Optional. Separates routings with the same key, e.g. an exchange name in the amqp driver |
 | `ordered` | `work` only: one consumer at a time, in publish order, with failover to another replica |
+| `queue` | `pubSub` consume only: a durable subscription. Consumers naming the same queue share its messages (each once, retried like `work`); each queue name gets its own copy. Publishers omit it |
 
 ### Consuming
 
@@ -259,12 +260,14 @@ and `close()`. Every driver keeps the same contract:
 - `publish()` resolves once the transport took the message (amqp: broker confirm, memory:
   enqueued). It never waits for a handler, and a handler's error never reaches it. It rejects
   only when the hand-off fails, e.g. after `close()`.
-- A `work` message reaches one consumer, a `pubSub` message every consumer.
+- A `work` message reaches one consumer, a `pubSub` message every consumer, except that the
+  consumers naming the same `queue` share one copy.
 - `cancel()` resolves once the consumer's handlers in flight settled; `close()` makes later
   publishes reject. `MessageBus.close()` closes its driver.
 
 The memory driver keeps amqp's queue semantics: a `work` routing without `namespace` is a queue
-that keeps a message until a consumer takes it; any other routing gives each consumer its own copy
+that keeps a message until a consumer takes it, and so is a `pubSub` `queue` once a consumer
+declared it (round-robin across its consumers); any other routing gives each consumer its own copy
 and drops a message nobody consumes (amqp: an exclusive queue per consumer).
 
 ### Driver conformance

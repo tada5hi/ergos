@@ -88,6 +88,27 @@ export function defineDriverConformance(
             assert.equal(fromB?.id, published.id);
         });
 
+        run('should deliver a PUB_SUB message once per named queue, shared by its consumers', async (driver) => {
+            const to = routing('pubSub');
+            const a = collect(4);
+            const b = collect(4);
+            await driver.consume({ ...to, queue: `${to.key}-a` }, a.handler);
+            await driver.consume({ ...to, queue: `${to.key}-a` }, a.handler);
+            await driver.consume({ ...to, queue: `${to.key}-b` }, b.handler);
+
+            const published = [message(to), message(to), message(to), message(to)];
+            for (const item of published) {
+                await driver.publish(to, item);
+            }
+
+            const ids = published.map((item) => item.id).sort();
+            const [fromA, fromB] = await Promise.all([a.done, b.done]);
+            // ponytail: one event-loop turn for a duplicate to show
+            await tick();
+            assert.deepEqual(fromA.map((item) => item.id).sort(), ids);
+            assert.deepEqual(fromB.map((item) => item.id).sort(), ids);
+        });
+
         run('should resolve publish() when the handler throws', async (driver) => {
             const to = routing('work');
             const called = Promise.withResolvers<void>();

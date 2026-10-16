@@ -23,6 +23,22 @@ describe('src/message-bus/memory', () => {
         expect(seen.map((received) => received.id)).toEqual([published.id]);
     });
 
+    it('should keep a PUB_SUB message for a named queue while none of its consumers runs', async () => {
+        const driver = new MemoryMessageBusDriver();
+        const pubSub: MessageRouting = { type: 'pubSub', key: 'events' };
+        const subscription: MessageRouting = { ...pubSub, queue: 'hub' };
+        const seen: Message[] = [];
+        const consumer = await driver.consume(subscription, () => {});
+        await consumer.cancel();
+
+        const published = message(pubSub);
+        await driver.publish(pubSub, published);
+        await driver.consume(subscription, (received) => { seen.push(received); });
+        await drain();
+
+        expect(seen.map((received) => received.id)).toEqual([published.id]);
+    });
+
     it('should drop a message without consumer on a namespaced WORK or a PUB_SUB routing', async () => {
         const driver = new MemoryMessageBusDriver();
         const seen: string[] = [];

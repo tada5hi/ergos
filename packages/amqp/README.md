@@ -118,12 +118,19 @@ Each `MessageRouting` maps onto an exchange and a queue:
 | `{ type: 'work', key, ordered: true }` | Default (direct) exchange | As above, with `x-single-active-consumer` | yes | yes |
 | `{ type: 'work', key, namespace }` | Direct exchange `namespace` | Exclusive temporary queue per consumer, bound to `key` | yes | yes |
 | `{ type: 'pubSub', key }` | Topic exchange `namespace`, else `defaultTopicExchange` | Exclusive temporary queue per consumer, bound to `key` | no | no |
+| `{ type: 'pubSub', key, queue }` (consume) | As above | Durable queue named `queue`, bound to `key`, shared by the consumers naming it | no | yes |
 
 A message's `metadata.persistent` overrides the persistence of its routing. Its `metadata.expiresAt`
 becomes the AMQP `expiration` (the remaining ms), so the broker drops it unconsumed; one that still
 arrives late is dropped by `MessageBus` (`onExpired`). Only a `work` routing
-without a `namespace` keeps messages while no consumer is connected and splits them between
-replicas.
+without a `namespace` and a `pubSub` `queue` keep messages while no consumer is connected and split
+them between replicas.
+
+A `pubSub` `queue` is a durable fan-out subscription: each service names its own queue (e.g.
+`hub-core-authup-events`) and gets its own copy, its replicas share it. Only the consumer passes
+`queue`; the publisher's routing stays `{ type: 'pubSub', key, namespace }` and declares no queue, so
+the two never conflict. The queue keeps messages from the first consume on. Set
+`metadata.persistent: true` on the publisher for them to survive a broker restart.
 
 `publish()` resolves once the broker has confirmed the message, and rejects when it refuses
 it or the driver was closed. The driver passes synergos'
@@ -143,7 +150,8 @@ reached the message is acked and reported to `onDrop`. There is no dead-letter q
 If the re-publish itself fails, the message is requeued and comes back as a redelivery.
 
 A handler sees `message.metadata.delivery = { attempt, maxAttempts }`: for `work`, the 1-based
-attempt from `x-attempt` and the driver's `maxAttempts`; for `pubSub`, which is not retried,
+attempt from `x-attempt` and the driver's `maxAttempts` (likewise for a `pubSub` `queue`); for a
+plain `pubSub`, which is not retried,
 `{ attempt: 1, maxAttempts: 1 }`. So it can tell its last attempt apart, e.g. to report a failure
 instead of throwing once more. The value is set on consume only and is never published.
 
@@ -163,8 +171,8 @@ instead of throwing once more. The value is set on consume only and is never pub
 
 | Hook | Called with | When |
 |---|---|---|
-| `onRetry` | `{ message, routing, attempt, error }` | A `work` handler threw and the message was re-published (or requeued, if that failed) |
-| `onDrop` | `{ message, routing, attempt, error }` | A `work` message was acked and dropped after `maxAttempts`. `error` is the last handler error |
+| `onRetry` | `{ message, routing, attempt, error }` | A `work` (or `pubSub` `queue`) handler threw and the message was re-published (or requeued, if that failed) |
+| `onDrop` | `{ message, routing, attempt, error }` | A `work` (or `pubSub` `queue`) message was acked and dropped after `maxAttempts`. `error` is the last handler error |
 | `onMalformed` | `{ routing, content, error? }` | A delivery is not JSON (`error` is the parse error) or not a bus message. It is acked |
 
 `attempt` is the attempt that failed, 1-based. A hook that throws is ignored (see `invokeHook` in
@@ -187,8 +195,9 @@ synergos): it never changes how a message is settled.
   handlers idempotent.
 - **A redelivery that is not in flight counts as a failed attempt**, e.g. after the consumer
   crashed mid-handler.
-- **`pubSub` messages published while no consumer is connected are lost.** Each consumer has its
-  own exclusive temporary queue.
+- **`pubSub` messages published while no consumer is connected are lost**, unless they are consumed
+  through a `queue` that was declared before. Without one, each consumer has its own exclusive
+  temporary queue.
 - **Wire compatibility:** the JSON body and AMQP properties are byte-compatible with FLAME Hub's
   former driver. Only the retry counter moved, from the body (`metadata.attempt`) to the
   `x-attempt` header; on consume the driver reports it as `metadata.delivery.attempt`. A counter an

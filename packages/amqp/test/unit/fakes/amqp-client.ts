@@ -29,7 +29,8 @@ type FakeAmqpLog = {
 /**
  * Records what the driver hands amqp-extension; of() siblings share the log.
  * FakeAmqpClient.loopback() also delivers each publish to the matching consumers:
- * the default exchange round-robins (a queue), any other fans out (a queue per consumer).
+ * the default exchange round-robins (a queue), any other fans out (a queue per
+ * consumer, or one per options.queue, shared round-robin).
  * ponytail: no queue buffering, no retry; a handler error is dropped.
  */
 export class FakeAmqpClient implements IAmqpClient {
@@ -75,7 +76,9 @@ export class FakeAmqpClient implements IAmqpClient {
                 entry.key === key &&
                 entry.exchange.type === this.exchange.type &&
                 (entry.exchange.name || '') === (this.exchange.name || ''));
-            const targets = this.exchange.name ? matching : matching.slice(loopback.index++ % matching.length).slice(0, 1);
+            // a queue (the default exchange's, or a named one) delivers once, round-robin
+            const queues = Map.groupBy(matching, (entry) => (this.exchange.name ? entry.options.queue ?? entry : ''));
+            const targets = queues.values().toArray().map((group) => group[loopback.index++ % group.length]!);
             for (const entry of targets) {
                 const handled = Promise.resolve()
                     .then(() => entry.handler({ content: Buffer.from(body), properties: {} }))

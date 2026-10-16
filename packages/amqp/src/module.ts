@@ -28,7 +28,8 @@ import type {
 /**
  * Maps the message bus onto amqp-extension. WORK routings go through the default
  * (direct) exchange and are retried by amqp-extension (x-attempt header, backoff,
- * redelivery guard); PUB_SUB routings go through a topic exchange and are not retried.
+ * redelivery guard); PUB_SUB routings go through a topic exchange and are not retried,
+ * unless consumed through a named, durable `queue`, which is retried like WORK.
  * Delivery is at-least-once.
  */
 export class AmqpMessageBusDriver implements IMessageBusDriver {
@@ -79,15 +80,18 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
     }
 
     async consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
-        const isWork = routing.type === MessageRoutingType.WORK;
-        const maxAttempts = isWork ? this.options.maxAttempts ?? 5 : 1;
+        // a PUB_SUB queue is durable and shared, so it must not lose a failed message either
+        const isRetried = routing.type === MessageRoutingType.WORK || !!routing.queue;
+        const maxAttempts = isRetried ? this.options.maxAttempts ?? 5 : 1;
         const options: ConsumeOptions = {
             prefetchCount: this.options.prefetchCount ?? 1,
             // reached only when a retry re-publish fails: the message comes back as a redelivery
-            requeueOnFailure: isWork,
+            requeueOnFailure: isRetried,
             ...this.resolveQueueOptions(routing),
+            // only the consumer declares it: a topic publish declares no queue, so no 406
+            ...(routing.queue ? { queue: routing.queue } : {}),
         };
-        if (isWork) {
+        if (isRetried) {
             options.retry = { maxAttempts, delay: this.options.retryDelay ?? 1000 };
             // The handler's own error reaches MessageBus' onError hook first.
             // ponytail: a crashed redelivery's retries are not reported by amqp-extension, only its drop.
@@ -132,7 +136,7 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
 
                 // amqp-extension counts attempts in the x-attempt header, not in the body
                 message.metadata.delivery = {
-                    attempt: isWork ? resolveAttempt(input.properties) : 1,
+                    attempt: isRetried ? resolveAttempt(input.properties) : 1,
                     maxAttempts,
                 };
 

@@ -14,6 +14,7 @@ type MemoryConsumer = {
 };
 
 type MemoryQueue = {
+    routing: MessageRouting,
     index: number,
     pending: Message[],
 };
@@ -21,7 +22,8 @@ type MemoryQueue = {
 /**
  * In-process driver with amqp's queue semantics: a WORK routing without namespace
  * is a durable queue (kept until consumed, round-robin, `ordered`: one consumer);
- * any other routing gives each consumer its own copy and drops a message nobody
+ * so is a PUB_SUB `queue`, once a consumer declared it (one copy per queue name).
+ * Any other routing gives each consumer its own copy and drops a message nobody
  * consumes. publish() only enqueues; handlers run on a later microtask and their
  * errors are dropped (there is no retry: attempt 1 of 1).
  * ponytail: no prefetch, a consumer's handlers may overlap.
@@ -41,12 +43,21 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         const queue = this.resolveQueue(routing);
         if (queue) {
             queue.pending.push(message);
-            this.flush(routing, queue);
+            this.flush(queue);
             return;
         }
 
         for (const consumer of this.match(routing)) {
-            this.deliver(consumer, message);
+            if (!consumer.routing.queue) {
+                this.deliver(consumer, message);
+            }
+        }
+
+        for (const named of this.queues.values()) {
+            if (named.routing.queue && this.same(named.routing, routing)) {
+                named.pending.push(message);
+                this.flush(named);
+            }
         }
     }
 
@@ -60,7 +71,7 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
 
         const queue = this.resolveQueue(routing);
         if (queue) {
-            this.flush(routing, queue);
+            this.flush(queue);
         }
 
         return {
@@ -77,23 +88,35 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
         this.queues.clear();
     }
 
+    /**
+     * The durable queue of a WORK routing without namespace or of a PUB_SUB `queue`
+     * (the latter only from consume(): publishers omit it).
+     * ponytail: a named queue is keyed by its binding, so one name on two keys is two queues.
+     */
     protected resolveQueue(routing: MessageRouting): MemoryQueue | undefined {
         // amqp: a namespaced WORK routing is a named direct exchange, consumed through exclusive queues
-        if (routing.type !== MessageRoutingType.WORK || routing.namespace) {
+        const isWork = routing.type === MessageRoutingType.WORK;
+        if (isWork ? routing.namespace : !routing.queue) {
             return undefined;
         }
 
-        let queue = this.queues.get(routing.key);
+        const name = isWork ? routing.key : `${routing.namespace || ''}/${routing.key}/${routing.queue}`;
+        let queue = this.queues.get(name);
         if (!queue) {
-            queue = { index: 0, pending: [] };
-            this.queues.set(routing.key, queue);
+            queue = {
+                routing,
+                index: 0,
+                pending: [],
+            };
+            this.queues.set(name, queue);
         }
 
         return queue;
     }
 
-    protected flush(routing: MessageRouting, queue: MemoryQueue): void {
-        const matching = this.match(routing);
+    protected flush(queue: MemoryQueue): void {
+        const { routing } = queue;
+        const matching = this.match(routing).filter((consumer) => consumer.routing.queue === routing.queue);
         while (matching.length > 0 && queue.pending.length > 0) {
             const consumer = routing.ordered ? matching[0] : matching[queue.index++ % matching.length];
             this.deliver(consumer!, queue.pending.shift()!);
@@ -101,11 +124,11 @@ export class MemoryMessageBusDriver implements IMessageBusDriver {
     }
 
     protected match(routing: MessageRouting): MemoryConsumer[] {
-        return this.consumers.filter(
-            (consumer) => consumer.routing.key === routing.key &&
-                consumer.routing.type === routing.type &&
-                (consumer.routing.namespace || '') === (routing.namespace || ''),
-        );
+        return this.consumers.filter((consumer) => this.same(consumer.routing, routing));
+    }
+
+    protected same(a: MessageRouting, b: MessageRouting): boolean {
+        return a.key === b.key && a.type === b.type && (a.namespace || '') === (b.namespace || '');
     }
 
     protected deliver(consumer: MemoryConsumer, message: Message): void {

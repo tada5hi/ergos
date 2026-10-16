@@ -33,7 +33,8 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
 - **Driver conformance.** `synergos/conformance` (`src/conformance/`) holds the driver contract as
   cases (`defineDriverConformance({ describe, it }, createDriver)`, `node:assert`). `memory-driver.spec`
   runs it against `MemoryMessageBusDriver`, `driver.spec` (@synergos/amqp) against
-  `AmqpMessageBusDriver` over `FakeAmqpClient.loopback()`. A contract case goes there, not into a
+  `AmqpMessageBusDriver` over `FakeAmqpClient.loopback()` (round-robin per queue: the default
+  exchange's, or a consume's `options.queue`). A contract case goes there, not into a
   driver spec; driver specs keep only driver-specific behaviour.
 - **Delivery is asynchronous.** `publish()` / `dispatch()` resolve before the handlers ran. Wait
   for a handler with a deferred, or with `drain()` (`test/unit/fakes/drain.ts`, one `setImmediate`:

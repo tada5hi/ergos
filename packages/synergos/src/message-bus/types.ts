@@ -11,6 +11,12 @@ export type MessageRouting = {
      * whose handlers must not race each other across replicas.
      */
     ordered?: boolean,
+    /**
+     * PUB_SUB consume only: a durable subscription. Consumers naming the same
+     * queue share its messages (each once, retried like WORK); every queue name
+     * and every consumer without one gets its own copy. Publishers omit it.
+     */
+    queue?: string,
 };
 
 export type MessageMetadata = {

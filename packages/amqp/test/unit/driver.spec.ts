@@ -148,6 +148,38 @@ describe('src/module', () => {
         expect(client.consumes[0]?.options).toMatchObject({ prefetchCount: 4, retry: { maxAttempts: 3, delay: 10 } });
     });
 
+    it('should consume a PUB_SUB queue through a named, retried queue and publish to it like plain PUB_SUB', async () => {
+        const client = new FakeAmqpClient();
+        const driver = new AmqpMessageBusDriver({
+            client,
+            defaultTopicExchange: 'FLAME',
+            maxAttempts: 3,
+        });
+        const seen: Message[] = [];
+        const subscription: MessageRouting = { ...shapes.pubSubNamespace, queue: 'hub-events' };
+
+        await driver.consume(subscription, (received) => { seen.push(received); });
+        await driver.publish(subscription, message(subscription));
+
+        const [consumed] = client.consumes;
+        expect(consumed?.exchange).toEqual({ type: 'topic', name: 'custom' });
+        expect(consumed?.key).toBe('events');
+        const { onError, ...options } = consumed?.options ?? {};
+        expect(options).toEqual({
+            prefetchCount: 1,
+            requeueOnFailure: true,
+            queue: 'hub-events',
+            retry: { maxAttempts: 3, delay: 1000 },
+        });
+        expect(typeof onError).toBe('function');
+        // the publisher declares no queue, so it never conflicts with the consumer's
+        expect(client.publishes[0]?.options).not.toHaveProperty('queue');
+
+        const content = Buffer.from(JSON.stringify(message(subscription)));
+        await consumed?.handler({ content, properties: { headers: { 'x-attempt': 2 } } });
+        expect(seen[0]?.metadata.delivery).toEqual({ attempt: 2, maxAttempts: 3 });
+    });
+
     it('should report a retried WORK message to onRetry and a dropped one to onDrop', async () => {
         const client = new FakeAmqpClient();
         const retried: unknown[] = [];

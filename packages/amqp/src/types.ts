@@ -21,7 +21,7 @@ export interface IAmqpClient {
 }
 
 /**
- * A WORK message whose handler failed.
+ * A retried message (WORK, or PUB_SUB through a named queue) whose handler failed.
  */
 export type AmqpFailedMessage = {
     message: Message,
@@ -52,12 +52,12 @@ export type AmqpMalformedMessage = {
  */
 export type AmqpMessageBusDriverHooks = {
     /**
-     * A failed WORK message was re-published for another attempt (or requeued
+     * A failed retried message was re-published for another attempt (or requeued
      * when the re-publish failed).
      */
     onRetry?(failure: AmqpFailedMessage): void,
     /**
-     * A WORK message was dropped (acked) after maxAttempts.
+     * A retried message was dropped (acked) after maxAttempts.
      */
     onDrop?(failure: AmqpFailedMessage): void,
     onMalformed?(delivery: AmqpMalformedMessage): void,
@@ -70,7 +70,8 @@ export type AmqpMessageBusDriverOptions = ({ connectionString: string } | { clie
     defaultTopicExchange: string,
     hooks?: AmqpMessageBusDriverHooks,
     /**
-     * Delivery attempts of a WORK message before it is dropped (default: 5).
+     * Delivery attempts of a WORK message (or one consumed through a named PUB_SUB
+     * queue) before it is dropped (default: 5).
      */
     maxAttempts?: number,
     /**
