@@ -17,6 +17,12 @@ export type MessageMetadata = {
     timestamp: number,
     persistent?: boolean,
     routing: MessageRouting,
+    /**
+     * The 1-based delivery attempt of a consumed message, set by a driver that
+     * retries (amqp: WORK routings); absent otherwise. Lets a handler tell its
+     * last attempt apart. Not part of the published body.
+     */
+    attempt?: number,
 };
 
 export type Message<

@@ -5,7 +5,10 @@ import type {
 } from 'amqp-extension';
 import type { IMessageBusConsumer, Message, MessageRouting } from 'synergos';
 
-export type AmqpDeliveryHandler = (message: { content: Uint8Array }) => Promise<void>;
+export type AmqpDeliveryHandler = (message: {
+    content: Uint8Array,
+    properties: { headers?: Record<string, unknown> },
+}) => Promise<void>;
 
 /**
  * The part of amqp-extension's Client the driver uses; a Client satisfies it.

@@ -139,6 +139,10 @@ reached the message is acked and reported to `onDrop`. There is no dead-letter q
 
 If the re-publish itself fails, the message is requeued and comes back as a redelivery.
 
+A `work` handler sees its delivery attempt (1-based, read from `x-attempt`) as
+`message.metadata.attempt`, so it can tell its last attempt apart, e.g. to report a failure
+instead of throwing once more. The value is set on consume only and is never published.
+
 ## Options
 
 | Option | Type | Default | Description |
@@ -183,7 +187,8 @@ synergos): it never changes how a message is settled.
   own exclusive temporary queue.
 - **Wire compatibility:** the JSON body and AMQP properties are byte-compatible with FLAME Hub's
   former driver. Only the retry counter moved, from the body (`metadata.attempt`) to the
-  `x-attempt` header.
+  `x-attempt` header; on consume the driver copies it back into `metadata.attempt`, overriding
+  a counter an older producer left in the body.
 
 ## License
 
