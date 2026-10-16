@@ -179,6 +179,7 @@ const cleaner = defineScheduledComponent({
 await cleaner.start(); // one pass now, then one per tick
 cleaner.status();      // { lastSuccessAt, runningSince }
 await cleaner.stop();
+await cleaner.settled(); // the pass in flight, if any, has finished
 ```
 
 - `start()` runs a first pass before scheduling. Pass `runOnStart: false` to wait for the first tick.
@@ -187,6 +188,9 @@ await cleaner.stop();
 - `stop()` never waits for a pass in flight, so a pass may stop its own component. Stopped during
   the first pass, the component never schedules a tick. A pass must not *await* its component's
   `start()`, which would join the pass itself: restart with `void cleaner.start()`.
+- A shutdown that must outlive the pass (e.g. before closing the database) awaits `settled()`
+  after `stop()`; it resolves at once when no pass is running. A pass must never await its own
+  component's `settled()`: it would wait for itself and deadlock.
 - An invalid cron expression throws when the component is defined, before any pass runs.
 
 ## Message bus
@@ -506,9 +510,10 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
 | Export | Kind | Purpose |
 |---|---|---|
 | `Component` | class | `mount()`, `unmount()`, `handle()`, `initialize()`, `start()`, `stop()`, `status()` |
-| `defineScheduledComponent` | function | A node-cron job as an `IComponent` |
+| `defineScheduledComponent` | function | A node-cron job as an `IScheduledComponent` (an `IComponent` with `settled()`) |
 | `IComponent`, `ComponentStatus`, `ComponentEventMap`, `ComponentMetadata`, `ComponentHandler`, `ComponentHandlerFn`, `ComponentHandlerContext`, `ComponentHandleOptions` | type | The component contract and handler types |
 | `ICallable`, `ForwardedEvent` | type | A component with a `handle()`, and one forwarded event |
+| `IScheduledComponent`, `ScheduledComponentOptions` | type | A scheduled component, and its options |
 | `LocalDispatcher`, `RemoteDispatcher`, `RemoteWorker` | class | See [Dispatchers and workers](#dispatchers-and-workers) |
 | `IDispatcher`, `DispatchResult`, `LocalDispatchResult`, `LocalDispatcherOptions`, `RemoteDispatcherOptions`, `RemoteWorkerOptions` | type | Dispatcher contract, results and options |
 | `MessageBus` | class | Type dispatch over a driver, with hooks |

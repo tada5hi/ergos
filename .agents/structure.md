@@ -12,7 +12,7 @@ synergos/
 │   │   │   ├── index.ts                 # Public entry point; everything exported here is public API
 │   │   │   ├── types.ts                 # ObjectLiteral
 │   │   │   ├── hook/                    # invokeHook (guarded hook call), HookArgs
-│   │   │   ├── component/               # IComponent, ICallable, Component, defineScheduledComponent
+│   │   │   ├── component/               # IComponent, ICallable, IScheduledComponent, Component, defineScheduledComponent
 │   │   │   ├── dispatcher/              # IDispatcher + LocalDispatcher / RemoteDispatcher, internal wire codec
 │   │   │   ├── worker/                  # RemoteWorker, internal lifecycle helper
 │   │   │   ├── message-bus/             # IMessageBus, MessageBus, IMessageBusDriver, MemoryMessageBusDriver, message helpers
@@ -61,7 +61,7 @@ synergos/
 | Module | Purpose |
 |---|---|
 | `synergos/src/component/module.ts` | `Component`: key → handler map, `'*'` fallback, per-handler memoized `initialize()`, child events via `context.handle`, unhandled → `options.handle`, status of top-level calls |
-| `synergos/src/component/scheduled.ts` | `defineScheduledComponent`: cron expression validated at definition, first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`; `stop()` never waits for a pass (a pass may stop its own component), stop-during-start never schedules, the task is destroyed |
+| `synergos/src/component/scheduled.ts` | `defineScheduledComponent`: cron expression validated at definition, first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`; `stop()` never waits for a pass (a pass may stop its own component), stop-during-start never schedules, the task is destroyed; returns an `IScheduledComponent` whose `settled()` resolves once no pass runs (a shutdown awaits it after `stop()`; a pass must never await its own) |
 | `synergos/src/dispatcher/` | `IDispatcher` → `{ correlationId }`. `LocalDispatcher` (in-process, returns forwarded events as `replies`, optional `reply` component, no lifecycle), `RemoteDispatcher` (publishes a command; a rejected publish rejects `dispatch()`; no hooks) |
 | `synergos/src/dispatcher/wire.ts` | Internal (not exported): `correlate`, `toMessage` (drops a caller's `delivery`, a legacy body `attempt` and `timestamp`, overwrites `routing` in place), `fromMessage` (the only wire cast), `toForwardedMessage` (also drops `persistent` and `expiresAt`). Used by the dispatchers and `RemoteWorker` |
 | `synergos/src/worker/` | `RemoteWorker`: consumes a routing into an `ICallable`, publishes forwarded events (replies and unhandled commands) to `publish`, else `onUnrouted`; a rejected publish fails the command. Itself an `IComponent` on the internal `worker/lifecycle.ts` (`createLifecycle(acquire)`: a `start()` joins one in flight, a `stop()` waits for it and releases, calls during a release queue in call order so the last one wins, a failed `start()` or release can be retried) |
