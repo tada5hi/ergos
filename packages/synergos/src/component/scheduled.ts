@@ -9,6 +9,11 @@ import type { IComponent, ScheduledComponentOptions } from './types';
  * start() is typically fire-and-forget, the next tick retries.
  */
 export function defineScheduledComponent(options: ScheduledComponentOptions): IComponent {
+    // fail at definition, not after a full pass in start()
+    if (!cron.validate(options.schedule)) {
+        throw new Error(`Invalid cron expression: ${options.schedule}`);
+    }
+
     let task: ScheduledTask | undefined;
     // bumped by every start() and stop(): a start() whose first pass was
     // overtaken by either must not schedule afterwards
@@ -59,8 +64,10 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IC
 
             const current = task;
             task = undefined;
-            // ponytail: does not wait for a pass in flight; nothing is scheduled after it
-            await current?.stop();
+            // ponytail: does not wait for a pass in flight (a pass may stop its own component);
+            // nothing is scheduled after it
+            // destroy, not stop: a stopped task stays in node-cron's registry
+            await current?.destroy();
         },
         status: () => ({ lastSuccessAt, runningSince }),
     };

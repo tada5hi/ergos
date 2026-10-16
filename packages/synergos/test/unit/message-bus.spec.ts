@@ -138,8 +138,8 @@ describe('src/message-bus', () => {
             driver: new MemoryMessageBusDriver(),
             hooks: {
                 onPublish: (message) => { calls.push(['publish', message]); },
-                onConsume: (message, consumeRouting) => { calls.push(['consume', message, consumeRouting]); },
-                onUnhandled: (message, consumeRouting) => { calls.push(['unhandled', message, consumeRouting]); },
+                onConsume: (message, from) => { calls.push(['consume', message, from]); },
+                onUnhandled: (message, from) => { calls.push(['unhandled', message, from]); },
             },
         });
         await bus.consume(routing, { run: () => {} });

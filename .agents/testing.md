@@ -25,13 +25,13 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
 ### Unit Tests
 
 `test/unit/` holds the only test layer, one spec per module — synergos: `component`, `scheduled`,
-`hook`, `message-bus`, `memory-driver`, `direct-caller`, `dispatch-caller`, `worker-caller`;
+`hook`, `message-bus`, `memory-driver`, `local-dispatcher`, `remote-dispatcher`, `remote-worker`;
 @synergos/amqp: `driver`. Specs import the package under test from its **source** barrel
 (`'../../src'`), not from `dist/`; amqp specs import `synergos` by name (aliased to source).
 
 - **Fakes, never `vi.fn()` / `vi.mock()`.** Shared fakes live in `test/unit/fakes/`
   (`TestComponent`, `FakeMessageBus` implementing `IMessageBus`, `FakeAmqpClient`). The memory
-  driver is the bus in most caller specs. Hooks are asserted with plain objects whose hook
+  driver is the bus in most dispatcher and worker specs. Hooks are asserted with plain objects whose hook
   functions push into an array.
 - Every hook has a spec that it fires, and each hook site has one that a throwing hook leaves
   the outcome unchanged (resolve vs. reject, ack vs. retry).

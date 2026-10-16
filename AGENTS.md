@@ -8,7 +8,8 @@ An npm workspaces monorepo with two packages:
   optional command handlers (`Component`, `IComponent`), cron-driven background jobs
   (`defineScheduledComponent`), and the message bus that routes commands and replies between
   components (`IMessageBus` / `MessageBus`, `IMessageBusDriver`, `MemoryMessageBusDriver`,
-  `DirectCaller` / `DispatchCaller` / `WorkerCaller`). One runtime dependency (`node-cron`).
+  `IDispatcher` / `LocalDispatcher` / `RemoteDispatcher`, `RemoteWorker`). One runtime dependency
+  (`node-cron`).
 - **`@synergos/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
   [amqp-extension](https://www.npmjs.com/package/amqp-extension) (a real dependency);
   `synergos` is a peer.

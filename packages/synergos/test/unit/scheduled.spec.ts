@@ -1,3 +1,4 @@
+import cron from 'node-cron';
 import { describe, expect, it } from 'vitest';
 import { defineScheduledComponent } from '../../src';
 
@@ -95,5 +96,42 @@ describe('src/component/scheduled', () => {
         expect(seen).toBeGreaterThanOrEqual(1);
         await wait(1100);
         expect(passes).toBe(seen);
+    });
+    it('should reject an invalid cron expression at definition, before any pass', () => {
+        let passes = 0;
+        expect(() => defineScheduledComponent({ schedule: 'nope', run: async () => { passes++; } }))
+            .toThrow('nope');
+        expect(passes).toBe(0);
+    });
+
+    it('should settle and stay unscheduled when a pass stops its own component', async () => {
+        const baseline = cron.getTasks().size;
+        const awaited = defineScheduledComponent({
+            schedule: '0 0 1 1 *',
+            run: async () => {
+                await Promise.resolve();
+                await awaited.stop();
+            },
+        });
+        const fired = defineScheduledComponent({
+            schedule: '0 0 1 1 *',
+            run: async () => { void fired.stop(); },
+        });
+
+        await awaited.start();
+        await fired.start();
+
+        expect(cron.getTasks().size).toBe(baseline);
+    });
+
+    it('should not leave a cron task behind after stop', async () => {
+        const baseline = cron.getTasks().size;
+        const c = defineScheduledComponent({ schedule: '0 0 1 1 *', run: async () => {} });
+        await c.start();
+        expect(cron.getTasks().size).toBe(baseline + 1);
+        await c.stop();
+        await c.start();
+        await c.stop();
+        expect(cron.getTasks().size).toBe(baseline);
     });
 });

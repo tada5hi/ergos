@@ -6,7 +6,7 @@
 
 <p align="center">
     <b>Components with a lifecycle, scheduled jobs, and the message bus between them.</b><br>
-    A <code>Component</code> maps command keys to handlers; callers reach it in-process or over a bus,<br>
+    A <code>Component</code> maps command keys to handlers; dispatchers reach it in-process or over a bus,<br>
     and every observable event is a typed hook instead of a logger.
 </p>
 
@@ -26,7 +26,7 @@
     ·
     <a href="#message-bus">Message Bus</a>
     ·
-    <a href="#callers">Callers</a>
+    <a href="#dispatchers-and-workers">Dispatchers</a>
     ·
     <a href="#hooks">Hooks</a>
     ·
@@ -43,8 +43,8 @@ written against the transport it first ran on. synergos separates the three conc
 
 - **What a component does** is a set of handlers, `mount('build', (data, context) => …)`. A
   handler never sees a queue, a channel or an ack.
-- **How it is reached** is a caller. `DirectCaller` calls it in-process, `DispatchCaller` publishes
-  a command, `WorkerCaller` consumes commands into it and publishes its replies.
+- **How it is reached** is a dispatcher. `LocalDispatcher` calls it in-process, `RemoteDispatcher`
+  publishes a command, and a `RemoteWorker` consumes commands into it and publishes its replies.
 - **Where messages travel** is a driver behind `MessageBus`. `MemoryMessageBusDriver` ships here,
   [`@synergos/amqp`](https://npmjs.com/package/@synergos/amqp) adds RabbitMQ.
 
@@ -63,7 +63,11 @@ health-check all of them in one loop.
   - [Routing](#routing)
   - [Consuming](#consuming)
   - [Drivers](#drivers)
-- [Callers](#callers)
+- [Dispatchers and workers](#dispatchers-and-workers)
+  - [Forwarded events](#forwarded-events)
+  - [Publishing selected replies](#publishing-selected-replies)
+  - [Testing a handler](#testing-a-handler)
+- [Migrating from 0.1](#migrating-from-01)
 - [Hooks](#hooks)
 - [API](#api)
 - [Notes](#notes)
@@ -118,8 +122,8 @@ class Builder extends Component<BuilderEvents> {
 </p>
 
 So an event the component does not handle itself, `buildFinished` above, falls through to the
-caller's `options.handle`. That is how replies leave a component: a `WorkerCaller` publishes them,
-a `DirectCaller` collects them. The parent's metadata (such as a `correlationId`) is merged into
+caller's `options.handle`. That is how replies leave a component: a `RemoteWorker` publishes them,
+a `LocalDispatcher` collects them. The parent's metadata (such as a `correlationId`) is merged into
 every child event.
 
 `mount('*', handler)` catches every key without its own handler, and `unmount(key)` removes one.
@@ -179,13 +183,15 @@ await cleaner.stop();
 - `start()` runs a first pass before scheduling. Pass `runOnStart: false` to wait for the first tick.
 - Passes never overlap: a tick while a pass is still running is skipped.
 - A failing pass goes to `hooks.onError` and never rejects. The next tick simply runs again.
-- `stop()` during the first pass prevents the schedule from being created. It does not wait for a
-  pass in flight.
+- `stop()` never waits for a pass in flight, so a pass may stop its own component. Stopped during
+  the first pass, the component never schedules a tick. A pass must not *await* its component's
+  `start()`, which would join the pass itself: restart with `void cleaner.start()`.
+- An invalid cron expression throws when the component is defined, before any pass runs.
 
 ## Message bus
 
 `MessageBus` dispatches messages by `type` to handlers and hands publishing and consuming to a
-driver. Callers and components depend on the `IMessageBus` contract, not the class.
+driver. Dispatchers and workers depend on the `IMessageBus` contract, not the class.
 
 ```typescript
 import { MemoryMessageBusDriver, MessageBus, buildMessage } from 'synergos';
@@ -233,46 +239,201 @@ resolve to a consumer whose `cancel()` resolves once the handlers in flight have
 A driver implements `IMessageBusDriver`: `publish(routing, message)`, `consume(routing, handler)`
 and an optional `close()`.
 
-## Callers
+## Dispatchers and workers
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/architecture.svg" alt="A DispatchCaller publishes a build command through the message bus to a WorkerCaller, whose component replies with buildFinished" width="100%" />
+    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/architecture.svg" alt="A RemoteDispatcher publishes a build command through the message bus to a RemoteWorker, whose component replies with buildFinished" width="100%" />
 </p>
 
-| Caller | Where the component runs | Replies |
+Both dispatchers implement `IDispatcher`: `dispatch(key, data, metadata?)` resolves
+`{ correlationId, delivered }`. The `correlationId` is `metadata.correlationId`, or a fresh UUID
+when the metadata has none, and every forwarded event carries it.
+
+| Class | Where the component runs | Forwarded events |
 |---|---|---|
-| `DirectCaller` | In this process | `callAndWait()` returns them by key |
-| `DispatchCaller` | Wherever a `WorkerCaller` consumes the routing | Consumed separately, from the worker's `publishRouting` |
-| `WorkerCaller` | Wraps the component and consumes `consumeRouting` into it | Published to `publishRouting` |
+| `LocalDispatcher` | In this process | Returned as `replies`, and handed to the `reply` component if one is set |
+| `RemoteDispatcher` | Wherever a `RemoteWorker` consumes its `routing` | Published by that worker to its `publish` routing |
+| `RemoteWorker` | Wraps the component and consumes the `consume` routing into it | Published to `publish`; without one, dropped and reported to `onUnrouted` |
+
+The examples use the `Builder` component from [Components](#components) and these two routings:
 
 ```typescript
-import { DirectCaller, DispatchCaller, WorkerCaller } from 'synergos';
-
-// in-process
-const direct = new DirectCaller(new Builder());
-const replies = await direct.callAndWait('build', { id: '1' }, {});
-replies.buildFinished; // { id: '1' }
-
-// worker side
-const worker = new WorkerCaller(new Builder(), {
-    consumeRouting: { type: 'work', key: 'builder' },
-    publishRouting: { type: 'work', key: 'builder-events' },
-    messageBus,
-});
-await worker.start();
-
-// caller side
-const dispatch = new DispatchCaller<BuilderEvents>({
-    routing: { type: 'work', key: 'builder' },
-    messageBus,
-});
-await dispatch.call('build', { id: '1' }, {});
-
-await worker.stop(); // cancels the consumer, waits for the handler in flight, stops the component
+const commands = { type: 'work', key: 'builder' } as const;
+const events = { type: 'work', key: 'builder-events' } as const;
 ```
 
-A `WorkerCaller` is itself an `IComponent`: start and stop it with the rest of your application.
-`DirectCaller` assigns a `correlationId` when the metadata has none.
+### In-process
+
+A `LocalDispatcher` runs the component right away and returns what it forwarded:
+
+```typescript
+import { LocalDispatcher } from 'synergos';
+
+const { replies } = await new LocalDispatcher(new Builder()).dispatch('build', { id: '1' });
+replies; // [{ key: 'buildFinished', data: { id: '1' }, metadata: { correlationId: '…' } }]
+```
+
+### Over a message bus
+
+On the worker side, a `RemoteWorker` consumes `commands` and publishes the forwarded events to
+`events`. On the dispatching side, a second `RemoteWorker` consumes `events` into an inbox
+component, and a `RemoteDispatcher` sends the commands:
+
+```typescript
+import { Component, RemoteDispatcher, RemoteWorker } from 'synergos';
+
+// worker side
+await new RemoteWorker(new Builder(), { messageBus, consume: commands, publish: events }).start();
+
+// dispatching side
+const inbox = new Component<BuilderEvents>();
+inbox.mount('buildFinished', (data, context) => {
+    console.log('finished', data.id, context.metadata.correlationId);
+});
+await new RemoteWorker(inbox, { messageBus, consume: events }).start();
+
+const dispatcher = new RemoteDispatcher<BuilderEvents>({ messageBus, routing: commands });
+await dispatcher.dispatch('build', { id: '1' });
+```
+
+Pass the event map (`RemoteDispatcher<BuilderEvents>`), or annotate the variable as
+`IDispatcher<BuilderEvents>`: without it, any key and any data compile.
+
+### Choosing at startup
+
+Both dispatchers implement `IDispatcher`, so the rest of the application does not care where the
+component runs. Give a `LocalDispatcher` the same inbox as `reply`, and the replies arrive the same
+way in both modes:
+
+```typescript
+import type { IDispatcher } from 'synergos';
+
+const dispatcher: IDispatcher<BuilderEvents> = messageBus
+    ? new RemoteDispatcher({ messageBus, routing: commands })
+    : new LocalDispatcher(new Builder(), { reply: inbox });
+```
+
+### Falling back when the bus did not deliver
+
+`delivered` tells whether the bus accepted the command. It is always `true` for a
+`LocalDispatcher`; a `RemoteDispatcher` resolves `false` when no consumer matched (memory driver),
+so an application can run the command in-process instead. Pass the `correlationId` on, so the
+replies still match the original dispatch:
+
+```typescript
+const result = await remote.dispatch('build', { id: '1' });
+if (!result.delivered) {
+    await local.dispatch('build', { id: '1' }, { correlationId: result.correlationId });
+}
+```
+
+### Lifecycle
+
+A `RemoteWorker` is itself an `IComponent`: start and stop it with the rest of your application.
+`start()` starts the component, then consumes; `stop()` cancels the consumer, waits for the handler
+in flight, then stops the component. A concurrent `start()` joins the one in flight, a `stop()`
+during `start()` leaves no consumer behind, and a failed `start()` can be retried. A handler, or the
+component's own `start()` / `stop()`, must not *await* the worker's `stop()`: the stop waits for
+them. Call `void worker.stop()` instead; the worker ends stopped once they return.
+
+A `LocalDispatcher` has no lifecycle: start and stop the component, and the `reply` inbox you hand
+it, yourself.
+
+### Forwarded events
+
+A forwarded event is whatever a component does not handle itself and passes to `options.handle`:
+the child events it emits through `context.handle` (its replies), *and* a top-level command that no
+handler and no `'*'` accepted. The latter is on purpose, so a component can pass work on to the
+next one. Dispatchers and workers treat both kinds the same.
+
+A `RemoteWorker` passes an inbound command's metadata to the component unchanged, including
+`attempt` from a retrying driver. The events it publishes keep the rest of the metadata (such as
+the `correlationId`) but drop the command's `attempt`, `timestamp`, `persistent` and `routing`.
+Likewise, a `RemoteDispatcher` never sends a caller's `attempt`, `timestamp` or `routing`, so
+dispatching with an inbound `context.metadata` (to keep the `correlationId`) starts a fresh command;
+only a `persistent` the caller passes is kept. A `LocalDispatcher` hands the metadata to the
+component as given.
+
+A forwarded event whose publish resolves `false` (no consumer, memory driver) is reported to
+`onUndelivered`, and the command still settles (acked): a retry would re-run its side effects for a
+reply-only problem. A publish that *rejects* fails the command like a throwing handler: over AMQP the
+command is retried, and with the memory driver an inbox handler's error rejects `dispatch()`.
+
+### Publishing selected replies
+
+To run a component in-process but still announce some of its replies on the bus, dispatch locally
+and publish the chosen `replies` through a `RemoteDispatcher` on the events routing. Passing each
+reply's metadata keeps its `correlationId`:
+
+```typescript
+const local = new LocalDispatcher(new Builder());
+const announce = new RemoteDispatcher<BuilderEvents>({ messageBus, routing: events });
+
+const { replies } = await local.dispatch('build', { id: '1' });
+for (const reply of replies) {
+    if (reply.key === 'buildFinished') {
+        await announce.dispatch(reply.key, reply.data, reply.metadata);
+    }
+}
+```
+
+Unlike a `RemoteWorker`, a `RemoteDispatcher` keeps a `persistent` flag present in that metadata.
+
+### Testing a handler
+
+No fake context is needed: mount the handler on a `Component`, dispatch through a
+`LocalDispatcher` with the metadata the case needs, and assert on the replies:
+
+```typescript
+const component = new Component<BuilderEvents>();
+component.mount('build', buildHandler);
+
+// e.g. the last delivery attempt of a retrying driver
+const { replies } = await new LocalDispatcher(component).dispatch('build', { id: '1' }, { attempt: 5 });
+
+const failed = replies.find((reply) => reply.key === 'buildFailed');
+```
+
+`replies.find((reply) => reply.key === …)` narrows `reply.data` to that event's type.
+
+## Migrating from 0.1
+
+0.2 replaces the callers with dispatchers and a worker:
+
+| 0.1 | 0.2 |
+|---|---|
+| `ICaller.call(key, data, metadata)` | `IDispatcher.dispatch(key, data, metadata?)`, resolves `{ correlationId, delivered }` |
+| `DirectCaller.call(key, data, metadata)` | `LocalDispatcher.dispatch(key, data, metadata?)` |
+| `DirectCaller.callAndWait(...)` → `{ [key]: data }` | `LocalDispatcher.dispatch(...).replies`, an array in emission order: `replies.find((r) => r.key === 'buildFinished')` |
+| `DirectCaller.callWith(key, data, metadata, { handle })` | `component.handle(key, data, metadata, { handle })`, or the `reply` option of `LocalDispatcher` |
+| `new DispatchCaller({ routing, messageBus, hooks })` | `new RemoteDispatcher({ routing, messageBus, hooks })` |
+| `DispatchCallerOptions`, `DispatchCallerHooks` | `RemoteDispatcherOptions`, `RemoteDispatcherHooks` |
+| `new WorkerCaller(component, { consumeRouting, publishRouting, messageBus, hooks })` | `new RemoteWorker(component, { consume, publish, messageBus, hooks })` |
+| `WorkerCallerOptions`, `WorkerCallerHooks` | `RemoteWorkerOptions`, `RemoteWorkerHooks` |
+| `WorkerCaller.call(...)` | `LocalDispatcher`; a `RemoteWorker` is no longer a caller |
+| `CallerPayload`, `DirectCallerResponse` | `ForwardedEvent`, `LocalDispatchResult` |
+| an `IComponent` passed to a caller | an `ICallable` (an `IComponent` whose `handle` is not optional); `Component` is one |
+
+Behaviour that changed:
+
+- **`onUnrouted` takes one event.** `onUnrouted(key, data, metadata)` is now
+  `onUnrouted({ key, data, metadata })`. A one-parameter hook written against 0.1, such as
+  `onUnrouted(key)`, still compiles but then receives the event object.
+- **New hook `RemoteWorkerHooks.onUndelivered(message)`:** a forwarded event the bus did not accept.
+  0.1 did not report it.
+- **Every command carries a `correlationId`.** `RemoteDispatcher` generates one when the metadata has
+  none; 0.1's `DispatchCaller` sent none.
+- **Commands drop a caller's `attempt` and `timestamp`.** Re-dispatching with an inbound
+  `context.metadata` no longer carries the delivery attempt over; pass it explicitly if a receiver
+  needs it.
+- **`delivered` replaces the void result.** Falling back to in-process work when the bus did not
+  accept a command no longer needs a hand-built `buildMessage` + `publish()`:
+  `if (!result.delivered) await local.dispatch(key, data, { correlationId: result.correlationId })`.
+- **Worker lifecycle races are handled.** `RemoteWorker` joins a concurrent `start()`, and a `stop()`
+  during `start()` leaves no consumer behind, so application-side ordering of starts and teardown
+  is no longer needed for that.
+- **Scheduled components** validate the cron expression when they are defined and destroy their
+  node-cron task on `stop()`.
 
 ## Hooks
 
@@ -285,8 +446,9 @@ to your logger, metrics or tracing:
 | | `onConsume(message, routing)` | A message arrived, before dispatch |
 | | `onUnhandled(message, routing)` | No handler (and no `'*'`) accepted it. It is acked |
 | | `onError(error, message, routing)` | A handler threw. The error is rethrown to the driver afterwards |
-| `DispatchCaller` | `onUndelivered(message)` | `publish()` resolved `false`: no consumer matched (memory driver) |
-| `WorkerCaller` | `onUnrouted(key, data, metadata)` | A reply was dropped because no `publishRouting` is set |
+| `RemoteDispatcher` | `onUndelivered(message)` | `publish()` resolved `false`: no consumer matched (memory driver). `dispatch()` resolves `delivered: false` |
+| `RemoteWorker` | `onUnrouted(event)` | A forwarded event was dropped because no `publish` routing is set |
+| | `onUndelivered(message)` | Publishing a forwarded event resolved `false`. The command still settles |
 | `defineScheduledComponent` | `onError(error)` | A pass failed |
 
 ```typescript
@@ -310,8 +472,9 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
 | `Component` | class | `mount()`, `unmount()`, `handle()`, `initialize()`, `start()`, `stop()`, `status()` |
 | `defineScheduledComponent` | function | A node-cron job as an `IComponent` |
 | `IComponent`, `ComponentStatus`, `ComponentEventMap`, `ComponentMetadata`, `ComponentHandler`, `ComponentHandlerFn`, `ComponentHandlerContext`, `ComponentHandleOptions` | type | The component contract and handler types |
-| `DirectCaller`, `DispatchCaller`, `WorkerCaller` | class | The callers, see [Callers](#callers) |
-| `ICaller`, `DirectCallerResponse`, `DispatchCallerOptions`, `WorkerCallerOptions` | type | Caller contract and options |
+| `ICallable`, `ForwardedEvent` | type | A component with a `handle()`, and one forwarded event |
+| `LocalDispatcher`, `RemoteDispatcher`, `RemoteWorker` | class | See [Dispatchers and workers](#dispatchers-and-workers) |
+| `IDispatcher`, `DispatchResult`, `LocalDispatchResult`, `LocalDispatcherOptions`, `RemoteDispatcherOptions`, `RemoteWorkerOptions` | type | Dispatcher contract, results and options |
 | `MessageBus` | class | Type dispatch over a driver, with hooks |
 | `MemoryMessageBusDriver` | class | In-process driver |
 | `IMessageBus`, `IMessageBusDriver`, `IMessageBusConsumer` | type | The bus, driver and consumer contracts |
@@ -319,14 +482,15 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
 | `MessageRoutingType` | enum | `WORK` (`'work'`), `PUB_SUB` (`'pubSub'`) |
 | `buildMessage`, `isMessage`, `serializeMessage` | function | Message helpers |
 | `invokeHook` | function | Calls a hook and ignores a throw or rejection |
-| `MessageBusHooks`, `DispatchCallerHooks`, `WorkerCallerHooks`, `ScheduledComponentHooks` | type | Hook types |
+| `MessageBusHooks`, `RemoteDispatcherHooks`, `RemoteWorkerHooks`, `ScheduledComponentHooks` | type | Hook types |
 
 ## Notes
 
 - **Delivery through a broker is at-least-once.** Make handlers idempotent.
 - **An unknown key resolves silently** on a component with neither a `'*'` handler nor an
-  `options.handle`. A `WorkerCaller` acks such a command.
-- **A handler that throws rejects the call.** Through a `WorkerCaller`, the error reaches the bus
+  `options.handle`. Through a dispatcher or a `RemoteWorker`, it is a
+  [forwarded event](#forwarded-events).
+- **A handler that throws rejects the call.** Through a `RemoteWorker`, the error reaches the bus
   (`onError`) and the driver decides: the memory driver rejects `publish()`, the amqp driver retries.
 - **`MemoryMessageBusDriver` awaits end to end:** `publish()` resolves after every matching
   handler has finished, replies included, which makes tests deterministic.
