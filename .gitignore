@@ -10,3 +10,6 @@ npm-debug.log*
 cache
 .claude/settings.local.json
 .nx
+
+# agent planning notes
+docs/superpowers/
