@@ -1,6 +1,6 @@
 {
     "name": "hubwire",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "type": "module",
     "description": "Components with a start/stop/status lifecycle, optional command handlers, scheduled jobs and the message bus that routes commands between them.",
     "author": {

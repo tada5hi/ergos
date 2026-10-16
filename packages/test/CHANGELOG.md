@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.1](https://github.com/tada5hi/hubwire/compare/test-v0.1.0...test-v0.1.1) (2026-10-16)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * hubwire bumped from ^0.2.0 to ^0.2.1
+  * peerDependencies
+    * hubwire bumped from ^0.2.0 to ^0.2.1
+
 ## 0.1.0 (2026-10-16)
 
 
