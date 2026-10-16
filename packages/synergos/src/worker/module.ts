@@ -32,7 +32,7 @@ export class RemoteWorker<
             try {
                 consumer = await options.messageBus.consumeAny(options.consume, (message) => this.consume(message));
             } catch (e) {
-                await component.stop();
+                await component.stop().catch(() => {});
                 throw e;
             }
 

@@ -93,7 +93,7 @@ export type MessageBusOptions = {
 };
 
 /**
- * What callers and components depend on; MessageBus is the implementation.
+ * What dispatchers, workers and components depend on; MessageBus is the implementation.
  */
 export interface IMessageBus {
     /**

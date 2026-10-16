@@ -299,4 +299,35 @@ describe('src/worker/module', () => {
         await expect(worker.start()).resolves.toBeUndefined();
         expect(messageBus.active).toBe(1);
     });
+
+    it('should start again only after a stop in flight released', async () => {
+        const messageBus = new FakeMessageBus();
+        const component = new TestComponent();
+        const worker = new RemoteWorker(component, { messageBus, consume: commands });
+        await worker.start();
+
+        const stopped = worker.stop();
+        await worker.start();
+        await stopped;
+
+        expect(component.lifecycle).toEqual(['start', 'stop', 'start']);
+        expect(messageBus.active).toBe(1);
+        expect(messageBus.consumed).toHaveLength(2);
+    });
+
+    it('should resolve a concurrent stop only after the component stopped', async () => {
+        const messageBus = new FakeMessageBus();
+        const component = new TestComponent();
+        const worker = new RemoteWorker(component, { messageBus, consume: commands });
+        await worker.start();
+
+        const seen: string[][] = [];
+        await Promise.all([
+            worker.stop().then(() => { seen.push([...component.lifecycle]); }),
+            worker.stop().then(() => { seen.push([...component.lifecycle]); }),
+        ]);
+
+        expect(seen).toEqual([['start', 'stop'], ['start', 'stop']]);
+        expect(messageBus.active).toBe(0);
+    });
 });
