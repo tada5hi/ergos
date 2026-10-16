@@ -4,7 +4,7 @@
     "bump-patch-for-minor-pre-major": true,
     "initial-version": "0.1.0",
     "packages": {
-        "packages/busline": {"component": "busline"},
+        "packages/hubwire": {"component": "hubwire"},
         "packages/amqp": {"component": "amqp"},
         "packages/test": {"component": "test"}
     },

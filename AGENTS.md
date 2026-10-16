@@ -1,22 +1,22 @@
 <!-- NOTE: Keep this file and all corresponding files in the .agents directory updated as the project evolves. When making architectural changes, adding new patterns, or discovering important conventions, update the relevant sections. -->
 
-# busline — Agent Guide
+# hubwire — Agent Guide
 
 An npm workspaces monorepo with three packages:
 
-- **`busline`** (`packages/busline`) — components with a `start` / `stop` / `status` lifecycle and
+- **`hubwire`** (`packages/hubwire`) — components with a `start` / `stop` / `status` lifecycle and
   optional command handlers (`Component`, `IComponent`), cron-driven background jobs
   (`defineScheduledComponent`), and the message bus that routes commands and replies between
   components (`IMessageBus` / `MessageBus`, `IMessageBusDriver`, `MemoryMessageBusDriver`,
   `IDispatcher` / `LocalDispatcher` / `RemoteDispatcher`, `RemoteWorker`). One runtime dependency
   (`node-cron`).
-- **`@busline/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
+- **`@hubwire/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
   [amqp-extension](https://www.npmjs.com/package/amqp-extension) (a real dependency);
-  `busline` is a peer.
-- **`@busline/test`** (`packages/test`) — test kit for consumers and driver authors:
+  `hubwire` is a peer.
+- **`@hubwire/test`** (`packages/test`) — test kit for consumers and driver authors:
   `defineDriverConformance` (the driver contract as test-framework-agnostic cases on `node:assert`;
   callers pass vitest's / jest's / node:test's `describe` / `it`), `FakeMessageBus`, `drain()`.
-  `busline` is a peer + dev dependency.
+  `hubwire` is a peer + dev dependency.
 
 Consumers: FLAME Hub and authup. ESM-only. Observability is through typed `hooks` options,
 not a logger.

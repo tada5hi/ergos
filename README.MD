@@ -1,8 +1,8 @@
 <p align="center">
-    <img src="./.github/assets/logo.svg" alt="busline" width="128" height="128" />
+    <img src="./.github/assets/logo.svg" alt="hubwire" width="128" height="128" />
 </p>
 
-<h1 align="center">busline</h1>
+<h1 align="center">hubwire</h1>
 
 <p align="center">
     <b>Background components that start, stop, report their health and talk to each other.</b><br>
@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-    <a href="https://npmjs.com/package/busline"><img src="https://badge.fury.io/js/busline.svg" alt="npm version" /></a>
-    <a href="https://github.com/tada5hi/busline/actions/workflows/main.yml"><img src="https://github.com/tada5hi/busline/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
-    <a href="https://codecov.io/gh/tada5hi/busline"><img src="https://codecov.io/gh/tada5hi/busline/branch/master/graph/badge.svg?token=4KNSG8L13V" alt="codecov" /></a>
-    <a href="https://snyk.io/test/github/tada5hi/busline?targetFile=packages/busline/package.json"><img src="https://snyk.io/test/github/tada5hi/busline/badge.svg?targetFile=packages/busline/package.json" alt="Known Vulnerabilities" /></a>
+    <a href="https://npmjs.com/package/hubwire"><img src="https://badge.fury.io/js/hubwire.svg" alt="npm version" /></a>
+    <a href="https://github.com/tada5hi/hubwire/actions/workflows/main.yml"><img src="https://github.com/tada5hi/hubwire/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
+    <a href="https://codecov.io/gh/tada5hi/hubwire"><img src="https://codecov.io/gh/tada5hi/hubwire/branch/master/graph/badge.svg?token=4KNSG8L13V" alt="codecov" /></a>
+    <a href="https://snyk.io/test/github/tada5hi/hubwire?targetFile=packages/hubwire/package.json"><img src="https://snyk.io/test/github/tada5hi/hubwire/badge.svg?targetFile=packages/hubwire/package.json" alt="Known Vulnerabilities" /></a>
     <a href="https://conventionalcommits.org"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits" /></a>
 </p>
 
@@ -23,25 +23,25 @@
     ·
     <a href="#quick-start">Quick Start</a>
     ·
-    <a href="./packages/busline/README.md">busline docs</a>
+    <a href="./packages/hubwire/README.md">hubwire docs</a>
     ·
-    <a href="./packages/amqp/README.md">@busline/amqp docs</a>
+    <a href="./packages/amqp/README.md">@hubwire/amqp docs</a>
     ·
     <a href="#development">Development</a>
 </p>
 
 ---
 
-## Why busline?
+## Why hubwire?
 
 A backend service rarely does just HTTP. It also runs queue workers, cron jobs and handlers that
 other services call. Each of them usually gets its own startup code, its own shutdown code, its
 own health check and its own logging, and each one is tied to the transport it was written for.
 Testing a queue worker then needs either a broker or a pile of mocks.
 
-busline gives all of that one shape:
+hubwire gives all of that one shape:
 
-| Concern | Hand-rolled | busline |
+| Concern | Hand-rolled | hubwire |
 |---|---|---|
 | **Lifecycle** | Every worker, consumer and cron job has its own start and shutdown code | One `IComponent` contract: `start()`, `stop()`, `status()`, so you can start, stop and health-check all of them the same way |
 | **Health** | Ad-hoc flags, or none | `status()` reports `lastSuccessAt` and `runningSince` |
@@ -76,14 +76,14 @@ await new RemoteDispatcher({ messageBus, routing: commands }).dispatch('build', 
 
 | Package | Version | Description |
 |---|---|---|
-| [`busline`](./packages/busline) | [![npm](https://badge.fury.io/js/busline.svg)](https://npmjs.com/package/busline) | Components, scheduled components, the message bus with its in-memory driver, the local and remote dispatchers, and the remote worker. One runtime dependency (`node-cron`) |
-| [`@busline/amqp`](./packages/amqp) | [![npm](https://badge.fury.io/js/@busline%2Famqp.svg)](https://npmjs.com/package/@busline/amqp) | `AmqpMessageBusDriver`: the message bus over RabbitMQ, with retries and backoff, built on [amqp-extension](https://www.npmjs.com/package/amqp-extension) |
-| [`@busline/test`](./packages/test) | [![npm](https://badge.fury.io/js/@busline%2Ftest.svg)](https://npmjs.com/package/@busline/test) | The driver conformance suite (vitest, jest, `node:test`) and test fakes (`FakeMessageBus`, `drain`) |
+| [`hubwire`](./packages/hubwire) | [![npm](https://badge.fury.io/js/hubwire.svg)](https://npmjs.com/package/hubwire) | Components, scheduled components, the message bus with its in-memory driver, the local and remote dispatchers, and the remote worker. One runtime dependency (`node-cron`) |
+| [`@hubwire/amqp`](./packages/amqp) | [![npm](https://badge.fury.io/js/@hubwire%2Famqp.svg)](https://npmjs.com/package/@hubwire/amqp) | `AmqpMessageBusDriver`: the message bus over RabbitMQ, with retries and backoff, built on [amqp-extension](https://www.npmjs.com/package/amqp-extension) |
+| [`@hubwire/test`](./packages/test) | [![npm](https://badge.fury.io/js/@hubwire%2Ftest.svg)](https://npmjs.com/package/@hubwire/test) | The driver conformance suite (vitest, jest, `node:test`) and test fakes (`FakeMessageBus`, `drain`) |
 
 ```bash
-npm install busline --save
-npm install @busline/amqp --save # for RabbitMQ
-npm install @busline/test --save-dev # driver conformance, test fakes
+npm install hubwire --save
+npm install @hubwire/amqp --save # for RabbitMQ
+npm install @hubwire/test --save-dev # driver conformance, test fakes
 ```
 
 All packages are ESM-only and require Node.js `>=22`.
@@ -94,8 +94,8 @@ All packages are ESM-only and require Node.js `>=22`.
 `context.handle()` emits an event the component does not handle itself, here the reply.
 
 ```typescript
-import { Component } from 'busline';
-import type { ComponentMetadata } from 'busline';
+import { Component } from 'hubwire';
+import type { ComponentMetadata } from 'hubwire';
 
 type BuilderEvents = {
     build: [{ id: string }, ComponentMetadata],
@@ -112,7 +112,7 @@ builder.mount('build', async (data, context) => {
 **2. Call it in-process.** A `LocalDispatcher` runs the component and returns its replies:
 
 ```typescript
-import { LocalDispatcher } from 'busline';
+import { LocalDispatcher } from 'hubwire';
 
 const { replies } = await new LocalDispatcher(builder).dispatch('build', { id: '1' });
 // [{ key: 'buildFinished', data: { id: '1' }, metadata: { correlationId: '…' } }]
@@ -128,7 +128,7 @@ import {
     MessageBus,
     RemoteDispatcher,
     RemoteWorker,
-} from 'busline';
+} from 'hubwire';
 
 const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
 const commands = { type: 'work', key: 'builder' } as const;
@@ -155,7 +155,7 @@ await worker.stop(); // waits for the handler in flight
 **4. Go to production** by swapping the driver; nothing else changes:
 
 ```typescript
-import { AmqpMessageBusDriver } from '@busline/amqp';
+import { AmqpMessageBusDriver } from '@hubwire/amqp';
 
 const messageBus = new MessageBus({
     driver: new AmqpMessageBusDriver({
@@ -165,8 +165,8 @@ const messageBus = new MessageBus({
 });
 ```
 
-The full API is in each package's README: [busline](./packages/busline/README.md),
-[@busline/amqp](./packages/amqp/README.md) and [@busline/test](./packages/test/README.md).
+The full API is in each package's README: [hubwire](./packages/hubwire/README.md),
+[@hubwire/amqp](./packages/amqp/README.md) and [@hubwire/test](./packages/test/README.md).
 
 ## Development
 

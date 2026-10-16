@@ -1,5 +1,5 @@
 <svg width="960" height="400" viewBox="0 0 960 400" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ar-title ar-desc">
-    <title id="ar-title">How a command travels through busline</title>
+    <title id="ar-title">How a command travels through hubwire</title>
     <desc id="ar-desc">A RemoteDispatcher publishes a build command to the work routing builder. The MessageBus hands it to a driver (memory or AMQP), a RemoteWorker consumes it into a Component, and the component's buildFinished reply is published to builder-events, where the dispatching side consumes it. A LocalDispatcher calls the same component in-process.</desc>
 
     <style>
@@ -81,7 +81,7 @@
     <rect x="392" y="274" width="80" height="26" rx="13" fill="#6366F1" fill-opacity="0.16" stroke="#6366F1" stroke-opacity="0.5"/>
     <text class="code" x="432" y="291" font-size="11" text-anchor="middle">memory</text>
     <rect x="482" y="274" width="138" height="26" rx="13" fill="#F97316" fill-opacity="0.16" stroke="#F97316" stroke-opacity="0.55"/>
-    <text class="code" x="551" y="291" font-size="11" text-anchor="middle">@busline/amqp</text>
+    <text class="code" x="551" y="291" font-size="11" text-anchor="middle">@hubwire/amqp</text>
 
     <!-- worker process -->
     <rect class="panel" x="694" y="16" width="250" height="300" rx="18"/>

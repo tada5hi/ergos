@@ -1,5 +1,5 @@
 <svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sa-title">
-    <title id="sa-title">@busline/amqp logo: three components connected through a RabbitMQ exchange</title>
+    <title id="sa-title">@hubwire/amqp logo: three components connected through a RabbitMQ exchange</title>
 
     <defs>
         <linearGradient id="sa-tile" x1="24" y1="24" x2="232" y2="232" gradientUnits="userSpaceOnUse">

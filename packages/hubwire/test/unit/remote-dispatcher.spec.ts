@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RemoteDispatcher } from '../../src';
 import type { MessageRouting } from '../../src';
 import type { TestEventMap } from './fakes/component';
-import { FakeMessageBus } from '@busline/test';
+import { FakeMessageBus } from '@hubwire/test';
 
 const routing: MessageRouting = { type: 'work', key: 'commands' };
 

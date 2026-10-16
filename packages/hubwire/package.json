@@ -1,5 +1,5 @@
 {
-    "name": "busline",
+    "name": "hubwire",
     "version": "0.1.0",
     "type": "module",
     "description": "Components with a start/stop/status lifecycle, optional command handlers, scheduled jobs and the message bus that routes commands between them.",
@@ -10,8 +10,8 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/tada5hi/busline.git",
-        "directory": "packages/busline"
+        "url": "https://github.com/tada5hi/hubwire.git",
+        "directory": "packages/hubwire"
     },
     "main": "dist/index.mjs",
     "types": "dist/index.d.mts",
@@ -51,7 +51,7 @@
     },
     "nx": {
         "implicitDependencies": [
-            "!@busline/test"
+            "!@hubwire/test"
         ]
     }
 }

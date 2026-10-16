@@ -5,7 +5,7 @@ import type {
     MessageHandler,
     MessageHandlers,
     MessageRouting,
-} from 'busline';
+} from 'hubwire';
 
 /**
  * Records publishes. Consumers are recorded, never fed.

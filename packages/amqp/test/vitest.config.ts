@@ -5,8 +5,8 @@ export default defineConfig({
     resolve: {
         // the core's source, not its dist: no build needed before testing
         alias: [
-            { find: /^busline$/, replacement: fileURLToPath(new URL('../../busline/src/index.ts', import.meta.url)) },
-            { find: /^@busline\/test$/, replacement: fileURLToPath(new URL('../../test/src/index.ts', import.meta.url)) },
+            { find: /^hubwire$/, replacement: fileURLToPath(new URL('../../hubwire/src/index.ts', import.meta.url)) },
+            { find: /^@hubwire\/test$/, replacement: fileURLToPath(new URL('../../test/src/index.ts', import.meta.url)) },
         ],
     },
     test: {

@@ -1,4 +1,4 @@
 {
-    "packages/busline": "0.1.0",
+    "packages/hubwire": "0.1.0",
     "packages/amqp": "0.1.0"
 }

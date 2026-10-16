@@ -2,9 +2,9 @@
     "extends": "./tsconfig.build.json",
     "compilerOptions": {
         "paths": {
-            "busline": ["./packages/busline/src/index.ts"],
-            "@busline/test": ["./packages/test/src/index.ts"],
-            "@busline/amqp": ["./packages/amqp/src/index.ts"]
+            "hubwire": ["./packages/hubwire/src/index.ts"],
+            "@hubwire/test": ["./packages/test/src/index.ts"],
+            "@hubwire/amqp": ["./packages/amqp/src/index.ts"]
         }
     }
 }

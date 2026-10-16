@@ -1,4 +1,4 @@
-import type { IMessageBusDriver } from 'busline';
+import type { IMessageBusDriver } from 'hubwire';
 
 /**
  * The part of a test framework the suite needs; vitest's and node:test's

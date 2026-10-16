@@ -1,8 +1,8 @@
 {
-    "name": "@busline/test",
+    "name": "@hubwire/test",
     "version": "0.0.0",
     "type": "module",
-    "description": "Test-framework-agnostic conformance suite for busline message bus drivers (vitest, jest, node:test).",
+    "description": "Test-framework-agnostic conformance suite for hubwire message bus drivers (vitest, jest, node:test).",
     "author": {
         "name": "Peter Placzek",
         "email": "contact@tada5hi.net",
@@ -10,7 +10,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/tada5hi/busline.git",
+        "url": "https://github.com/tada5hi/hubwire.git",
         "directory": "packages/test"
     },
     "main": "dist/index.mjs",
@@ -40,16 +40,16 @@
         "message-bus",
         "conformance",
         "test",
-        "busline"
+        "hubwire"
     ],
     "publishConfig": {
         "access": "public"
     },
     "license": "MIT",
     "devDependencies": {
-        "busline": "^0.1.0"
+        "hubwire": "^0.1.0"
     },
     "peerDependencies": {
-        "busline": "^0.1.0"
+        "hubwire": "^0.1.0"
     }
 }

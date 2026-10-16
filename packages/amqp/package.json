@@ -1,8 +1,8 @@
 {
-    "name": "@busline/amqp",
+    "name": "@hubwire/amqp",
     "version": "0.1.0",
     "type": "module",
-    "description": "AMQP (RabbitMQ) driver for the busline message bus, built on amqp-extension.",
+    "description": "AMQP (RabbitMQ) driver for the hubwire message bus, built on amqp-extension.",
     "author": {
         "name": "Peter Placzek",
         "email": "contact@tada5hi.net",
@@ -10,7 +10,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/tada5hi/busline.git",
+        "url": "https://github.com/tada5hi/hubwire.git",
         "directory": "packages/amqp"
     },
     "main": "dist/index.mjs",
@@ -40,7 +40,7 @@
         "message-bus",
         "amqp",
         "rabbitmq",
-        "busline"
+        "hubwire"
     ],
     "publishConfig": {
         "access": "public"
@@ -50,10 +50,10 @@
         "amqp-extension": "^5.1.2"
     },
     "devDependencies": {
-        "@busline/test": "^0.0.0",
-        "busline": "^0.1.0"
+        "@hubwire/test": "^0.0.0",
+        "hubwire": "^0.1.0"
     },
     "peerDependencies": {
-        "busline": "^0.1.0"
+        "hubwire": "^0.1.0"
     }
 }

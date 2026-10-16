@@ -12,14 +12,14 @@ import {
     invokeHook,
     isMessage,
     serializeMessage,
-} from 'busline';
+} from 'hubwire';
 import type {
     IMessageBusConsumer,
     IMessageBusDriver,
     Message,
     MessageHandler,
     MessageRouting,
-} from 'busline';
+} from 'hubwire';
 import type {
     AmqpMessageBusDriverHooks,
     AmqpMessageBusDriverOptions,

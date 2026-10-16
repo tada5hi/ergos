@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryMessageBusDriver, buildMessage } from '../../src';
 import type { Message, MessageRouting } from '../../src';
-import { drain } from '@busline/test';
+import { drain } from '@hubwire/test';
 
 const work: MessageRouting = { type: 'work', key: 'jobs' };
 

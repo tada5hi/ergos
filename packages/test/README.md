@@ -1,23 +1,23 @@
-# @busline/test
+# @hubwire/test
 
-[![npm version](https://badge.fury.io/js/@busline%2Ftest.svg)](https://npmjs.com/package/@busline/test)
+[![npm version](https://badge.fury.io/js/@hubwire%2Ftest.svg)](https://npmjs.com/package/@hubwire/test)
 
-**Test helpers for [busline](https://npmjs.com/package/busline).** The driver conformance suite,
-which pins the `IMessageBusDriver` contract as test cases, and the fakes busline's own specs use.
+**Test helpers for [hubwire](https://npmjs.com/package/hubwire).** The driver conformance suite,
+which pins the `IMessageBusDriver` contract as test cases, and the fakes hubwire's own specs use.
 It works with any test framework: vitest, jest or `node:test`.
 
 ## Installation
 
 ```bash
-npm install @busline/test --save-dev
+npm install @hubwire/test --save-dev
 ```
 
-`busline` is a peer dependency. ESM-only, Node.js `>=22`.
+`hubwire` is a peer dependency. ESM-only, Node.js `>=22`.
 
 ## Driver conformance
 
 `defineDriverConformance(framework, createDriver)` registers the driver contract's cases (see
-busline's [Drivers](https://github.com/tada5hi/busline/tree/master/packages/busline#drivers)).
+hubwire's [Drivers](https://github.com/tada5hi/hubwire/tree/master/packages/hubwire#drivers)).
 Hand it your framework's `describe` / `it` and a driver factory. It asserts with `node:assert`,
 whose `AssertionError` fails a test in any runner.
 
@@ -25,7 +25,7 @@ vitest:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { defineDriverConformance } from '@busline/test';
+import { defineDriverConformance } from '@hubwire/test';
 
 describe('MyMessageBusDriver', () => {
     defineDriverConformance({ describe, it }, () => new MyMessageBusDriver());
@@ -36,7 +36,7 @@ jest:
 
 ```typescript
 import { describe, it } from '@jest/globals';
-import { defineDriverConformance } from '@busline/test';
+import { defineDriverConformance } from '@hubwire/test';
 
 describe('MyMessageBusDriver', () => {
     defineDriverConformance({ describe, it }, () => new MyMessageBusDriver());
@@ -56,8 +56,8 @@ are left behind (`close()` deletes no queue), so point it at a throwaway vhost.
 | `drain()` | Resolves once the microtasks queued so far ran. The memory driver delivers on microtasks, so a whole publish → handler → publish chain is done |
 
 ```typescript
-import { RemoteDispatcher } from 'busline';
-import { FakeMessageBus } from '@busline/test';
+import { RemoteDispatcher } from 'hubwire';
+import { FakeMessageBus } from '@hubwire/test';
 
 const messageBus = new FakeMessageBus();
 await new RemoteDispatcher({ messageBus, routing: { type: 'work', key: 'builder' } })

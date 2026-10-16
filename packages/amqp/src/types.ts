@@ -3,7 +3,7 @@ import type {
     Exchange,
     PublishOptions,
 } from 'amqp-extension';
-import type { IMessageBusConsumer, Message, MessageRouting } from 'busline';
+import type { IMessageBusConsumer, Message, MessageRouting } from 'hubwire';
 
 export type AmqpDeliveryHandler = (message: {
     content: Uint8Array,
@@ -48,7 +48,7 @@ export type AmqpMalformedMessage = {
 
 /**
  * Observers (amqp-extension itself does not log). A hook that throws is ignored
- * (see invokeHook in busline).
+ * (see invokeHook in hubwire).
  */
 export type AmqpMessageBusDriverHooks = {
     /**

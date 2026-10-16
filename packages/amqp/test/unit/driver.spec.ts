@@ -9,9 +9,9 @@ import {
     MessageBus,
     RemoteWorker,
     buildMessage,
-} from 'busline';
-import type { Message, MessageRouting } from 'busline';
-import { defineDriverConformance } from '@busline/test';
+} from 'hubwire';
+import type { Message, MessageRouting } from 'hubwire';
+import { defineDriverConformance } from '@hubwire/test';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { hubWireFixture } from './fixtures/hub-wire';
 
