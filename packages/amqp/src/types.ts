@@ -3,8 +3,7 @@ import type {
     Exchange,
     PublishOptions,
 } from 'amqp-extension';
-import type { IMessageBusConsumer } from '../message-bus';
-import type { ILogger } from '../types';
+import type { ILogger, IMessageBusConsumer } from 'ergos';
 
 export type AmqpDeliveryHandler = (message: { content: Uint8Array }) => Promise<void>;
 

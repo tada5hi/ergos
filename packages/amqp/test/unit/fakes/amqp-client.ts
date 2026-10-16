@@ -3,7 +3,7 @@ import type {
     Exchange,
     PublishOptions,
 } from 'amqp-extension';
-import type { AmqpDeliveryHandler, IAmqpClient } from '../../../src/amqp';
+import type { AmqpDeliveryHandler, IAmqpClient } from '../../../src';
 
 export type FakeAmqpPublish = {
     exchange: Exchange, 

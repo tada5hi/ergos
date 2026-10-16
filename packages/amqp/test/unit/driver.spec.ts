@@ -1,9 +1,9 @@
 import { ClientError, resolveAttempt } from 'amqp-extension';
 import type { ConsumeMessage } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
-import { AmqpMessageBusDriver } from '../../src/amqp';
-import { buildMessageBusPayload } from '../../src';
-import type { MessageBusPayload, MessageBusRouting } from '../../src';
+import { AmqpMessageBusDriver } from '../../src';
+import { buildMessageBusPayload } from 'ergos';
+import type { MessageBusPayload, MessageBusRouting } from 'ergos';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { FakeLogger } from './fakes/logger';
 import { hubWireFixture } from './fixtures/hub-wire';
@@ -69,7 +69,7 @@ function toConsumeMessage(type: string, messageId: string): ConsumeMessage {
     };
 }
 
-describe('src/amqp', () => {
+describe('src/module', () => {
     describe('wire compatibility with hub', () => {
         it.each(Object.keys(shapes) as (keyof typeof shapes)[])('should publish %s like hub', async (name) => {
             const client = new FakeAmqpClient();

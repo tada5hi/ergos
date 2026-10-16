@@ -62,6 +62,26 @@ jobs:
               run: |
                   npm run lint
 
+    typecheck:
+        name: Typecheck
+        needs: [build]
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Install
+              uses: ./.github/actions/install
+              with:
+                  node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+            - name: Build
+              uses: ./.github/actions/build
+
+            - name: Typecheck
+              run: |
+                  npm run typecheck
+
     tests:
         name: Test
         needs: [build]

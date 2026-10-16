@@ -1,0 +1,58 @@
+{
+    "name": "@ergos/amqp",
+    "version": "0.0.0",
+    "type": "module",
+    "description": "AMQP (RabbitMQ) driver for the ergos message bus, built on amqp-extension.",
+    "author": {
+        "name": "Peter Placzek",
+        "email": "contact@tada5hi.net",
+        "url": "https://github.com/tada5hi"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tada5hi/ergos.git",
+        "directory": "packages/amqp"
+    },
+    "main": "dist/index.mjs",
+    "types": "dist/index.d.mts",
+    "exports": {
+        "./package.json": "./package.json",
+        ".": {
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "scripts": {
+        "build:types": "tsc --noEmit -p tsconfig.build.json",
+        "build:js": "tsdown",
+        "build": "npm run build:types && npm run build:js",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest --config test/vitest.config.ts --run",
+        "test:coverage": "vitest --config test/vitest.config.ts --run --coverage"
+    },
+    "keywords": [
+        "message-bus",
+        "amqp",
+        "rabbitmq",
+        "ergos"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "amqp-extension": "^5.1.0"
+    },
+    "devDependencies": {
+        "ergos": "^0.0.0"
+    },
+    "peerDependencies": {
+        "ergos": "^0.0.0"
+    }
+}
