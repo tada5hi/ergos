@@ -45,11 +45,11 @@ synergos gives all of that one shape:
 |---|---|---|
 | **Lifecycle** | Every worker, consumer and cron job has its own start and shutdown code | One `IComponent` contract: `start()`, `stop()`, `status()`, so you can start, stop and health-check all of them the same way |
 | **Health** | Ad-hoc flags, or none | `status()` reports `lastSuccessAt` and `runningSince` |
-| **Transport** | Handler code is written against amqplib, Redis or a function call | The handler only sees `(data, context)`. `DirectCaller`, `DispatchCaller` and `WorkerCaller` decide how it is reached |
-| **Replies** | A second queue, wired and correlated by hand | `context.handle('buildFinished', …)` emits a reply, `WorkerCaller` publishes it, and the metadata (e.g. a `correlationId`) carries over |
+| **Transport** | Handler code is written against amqplib, Redis or a function call | The handler only sees `(data, context)`. A `LocalDispatcher` or a `RemoteDispatcher` decides how it is reached, and both implement the same `IDispatcher` |
+| **Replies** | A second queue, wired and correlated by hand | `context.handle('buildFinished', …)` emits a reply, `RemoteWorker` publishes it, and the dispatch's `correlationId` carries over |
 | **Tests** | A broker in CI, or `vi.mock` on the client | `MemoryMessageBusDriver`: in-process, deterministic, and `publish()` rejects with the handler's error |
 | **Cron jobs** | Overlapping runs, an unhandled rejection on a failing pass | `defineScheduledComponent`: a first pass on start, no overlap, failures go to a hook |
-| **Shutdown** | Exit and hope the handler in flight finished | `WorkerCaller.stop()` waits for the handler in flight |
+| **Shutdown** | Exit and hope the handler in flight finished | `RemoteWorker.stop()` waits for the handler in flight |
 | **Observability** | A logger dependency in every class | Typed `hooks` (`onError`, `onRetry`, …). A hook that throws is ignored and can never turn an ack into a retry |
 
 The same component, reached three ways:
@@ -61,22 +61,23 @@ builder.mount('build', async (data, context) => {
 });
 
 // in-process, e.g. in a test or a CLI
-const replies = await new DirectCaller(builder).callAndWait('build', { id: '1' }, {});
+const local = await new LocalDispatcher(builder).dispatch('build', { id: '1' });
+local.replies; // [{ key: 'buildFinished', data: { id: '1' }, metadata: { correlationId } }]
 
 // through a bus: memory in tests, RabbitMQ in production
-await new WorkerCaller(builder, { consumeRouting, publishRouting, messageBus }).start();
-await new DispatchCaller({ routing: consumeRouting, messageBus }).call('build', { id: '1' }, {});
+await new RemoteWorker(builder, { messageBus, consume: commands, reply: replies }).start();
+await new RemoteDispatcher({ messageBus, routing: commands }).dispatch('build', { id: '1' });
 ```
 
 <p align="center">
-    <img src="./.github/assets/architecture.svg" alt="A DispatchCaller publishes a build command through the message bus to a WorkerCaller, whose component replies with buildFinished" width="100%" />
+    <img src="./.github/assets/architecture.svg" alt="A RemoteDispatcher publishes a build command through the message bus to a RemoteWorker, whose component replies with buildFinished" width="100%" />
 </p>
 
 ## Packages
 
 | Package | Version | Description |
 |---|---|---|
-| [`synergos`](./packages/synergos) | [![npm](https://badge.fury.io/js/synergos.svg)](https://npmjs.com/package/synergos) | Components, scheduled components, the message bus with its in-memory driver, and the direct, dispatch and worker callers. One runtime dependency (`node-cron`) |
+| [`synergos`](./packages/synergos) | [![npm](https://badge.fury.io/js/synergos.svg)](https://npmjs.com/package/synergos) | Components, scheduled components, the message bus with its in-memory driver, the local and remote dispatchers, and the remote worker. One runtime dependency (`node-cron`) |
 | [`@synergos/amqp`](./packages/amqp) | [![npm](https://badge.fury.io/js/@synergos%2Famqp.svg)](https://npmjs.com/package/@synergos/amqp) | `AmqpMessageBusDriver`: the message bus over RabbitMQ, with retries and backoff, built on [amqp-extension](https://www.npmjs.com/package/amqp-extension) |
 
 ```bash
@@ -91,10 +92,10 @@ Both packages are ESM-only and require Node.js `>=22`.
 ```typescript
 import {
     Component,
-    DispatchCaller,
     MemoryMessageBusDriver,
     MessageBus,
-    WorkerCaller,
+    RemoteDispatcher,
+    RemoteWorker,
 } from 'synergos';
 import type { ComponentMetadata } from 'synergos';
 
@@ -115,20 +116,22 @@ builder.mount('build', async (data, context) => {
     await context.handle('buildFinished', data);
 });
 
-const worker = new WorkerCaller(builder, {
-    consumeRouting: { type: 'work', key: 'builder' },
-    publishRouting: { type: 'work', key: 'builder-events' },
+const worker = new RemoteWorker(builder, {
     messageBus,
+    consume: { type: 'work', key: 'builder' },
+    reply: { type: 'work', key: 'builder-events' },
 });
 await worker.start();
 
-// caller side: listen for replies, send a command
-await messageBus.consume({ type: 'work', key: 'builder-events' }, {
-    buildFinished: (message) => console.log('finished', message.data.id),
-});
+// caller side: an inbox component for the replies, then send a command
+const inbox = new Component<BuilderEvents>();
+inbox.mount('buildFinished', (data, context) => console.log('finished', data.id, context.metadata.correlationId));
+await new RemoteWorker(inbox, { messageBus, consume: { type: 'work', key: 'builder-events' } }).start();
 
-await new DispatchCaller<BuilderEvents>({ routing: { type: 'work', key: 'builder' }, messageBus })
-    .call('build', { id: '1' }, {});
+const { correlationId, delivered } = await new RemoteDispatcher<BuilderEvents>({
+    messageBus,
+    routing: { type: 'work', key: 'builder' },
+}).dispatch('build', { id: '1' });
 
 await worker.stop(); // waits for the handler in flight
 ```

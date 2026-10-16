@@ -1,6 +1,6 @@
 <svg width="960" height="400" viewBox="0 0 960 400" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ar-title ar-desc">
     <title id="ar-title">How a command travels through synergos</title>
-    <desc id="ar-desc">A DispatchCaller publishes a build command to the work routing builder. The MessageBus hands it to a driver (memory or AMQP), a WorkerCaller consumes it into a Component, and the component's buildFinished reply is published to builder-events, where the caller side consumes it. A DirectCaller calls the same component in-process.</desc>
+    <desc id="ar-desc">A RemoteDispatcher publishes a build command to the work routing builder. The MessageBus hands it to a driver (memory or AMQP), a RemoteWorker consumes it into a Component, and the component's buildFinished reply is published to builder-events, where the dispatching side consumes it. A LocalDispatcher calls the same component in-process.</desc>
 
     <style>
         :root {
@@ -41,13 +41,13 @@
         </linearGradient>
     </defs>
 
-    <!-- caller process -->
+    <!-- dispatching process -->
     <rect class="panel" x="16" y="16" width="250" height="300" rx="18"/>
     <text class="label" x="36" y="44">caller process</text>
 
     <rect class="card" x="36" y="64" width="210" height="72" rx="12" stroke="#8B5CF6" stroke-width="1.5"/>
-    <text class="title" x="54" y="92">DispatchCaller</text>
-    <text class="code muted" x="54" y="116" font-size="12">call('build', { id })</text>
+    <text class="title" x="54" y="92">RemoteDispatcher</text>
+    <text class="code muted" x="54" y="116" font-size="12">dispatch('build', { id })</text>
 
     <rect class="card" x="36" y="196" width="210" height="72" rx="12" stroke="#14B8A6" stroke-width="1.5"/>
     <text class="title" x="54" y="224">messageBus.consume</text>
@@ -88,7 +88,7 @@
     <text class="label" x="714" y="44">worker process</text>
 
     <rect x="714" y="58" width="210" height="236" rx="14" stroke="#14B8A6" stroke-opacity="0.6" stroke-dasharray="5 5" fill="#14B8A6" fill-opacity="0.06"/>
-    <text class="title" x="730" y="84">WorkerCaller</text>
+    <text class="title" x="730" y="84">RemoteWorker</text>
 
     <rect class="card" x="730" y="100" width="178" height="178" rx="12" stroke="#14B8A6" stroke-width="1.5"/>
     <text class="title" x="746" y="126">Component</text>
@@ -126,6 +126,6 @@
 
     <!-- in-process alternative -->
     <rect class="panel" x="16" y="336" width="928" height="48" rx="14" stroke-dasharray="5 5"/>
-    <text class="title" x="36" y="365">DirectCaller</text>
-    <text class="muted" x="146" y="365" font-size="13">calls the same Component in-process: no bus, no broker. <tspan class="code" font-size="12">callAndWait()</tspan> returns the replies by key.</text>
+    <text class="title" x="36" y="365">LocalDispatcher</text>
+    <text class="muted" x="166" y="365" font-size="13">calls the same Component in-process: no bus, no broker. <tspan class="code" font-size="12">dispatch()</tspan> returns the replies.</text>
 </svg>

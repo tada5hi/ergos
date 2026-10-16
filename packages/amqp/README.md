@@ -74,11 +74,11 @@ npm install synergos @synergos/amqp --save
 
 ## Usage
 
-Pass the driver to a `MessageBus`. Everything built on that bus (`DispatchCaller`, `WorkerCaller`,
+Pass the driver to a `MessageBus`. Everything built on that bus (`RemoteDispatcher`, `RemoteWorker`,
 `consume()`) now goes through RabbitMQ:
 
 ```typescript
-import { MessageBus, WorkerCaller } from 'synergos';
+import { MessageBus, RemoteWorker } from 'synergos';
 import { AmqpMessageBusDriver } from '@synergos/amqp';
 
 const driver = new AmqpMessageBusDriver({
@@ -93,10 +93,10 @@ const driver = new AmqpMessageBusDriver({
 
 const messageBus = new MessageBus({ driver });
 
-const worker = new WorkerCaller(new Builder(), {
-    consumeRouting: { type: 'work', key: 'builder' },
-    publishRouting: { type: 'work', key: 'builder-events' },
+const worker = new RemoteWorker(new Builder(), {
     messageBus,
+    consume: { type: 'work', key: 'builder' },
+    reply: { type: 'work', key: 'builder-events' },
 });
 await worker.start();
 

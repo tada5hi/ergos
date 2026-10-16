@@ -12,8 +12,9 @@ synergos/
 │   │   │   ├── index.ts                 # Public entry point; everything exported here is public API
 │   │   │   ├── types.ts                 # ObjectLiteral
 │   │   │   ├── hook/                    # invokeHook (guarded hook call), HookArgs
-│   │   │   ├── component/               # IComponent, Component, defineScheduledComponent
-│   │   │   ├── caller/                  # ICaller + DirectCaller / DispatchCaller / WorkerCaller
+│   │   │   ├── component/               # IComponent, ICallable, Component, defineScheduledComponent, internal lifecycle
+│   │   │   ├── dispatcher/              # IDispatcher + LocalDispatcher / RemoteDispatcher, internal wire codec
+│   │   │   ├── worker/                  # RemoteWorker
 │   │   │   └── message-bus/             # IMessageBus, MessageBus, IMessageBusDriver, MemoryMessageBusDriver, message helpers
 │   │   ├── test/
 │   │   │   ├── unit/*.spec.ts           # One spec per module
@@ -60,7 +61,10 @@ synergos/
 |---|---|
 | `synergos/src/component/module.ts` | `Component`: key → handler map, `'*'` fallback, per-handler memoized `initialize()`, child events via `context.handle`, unhandled → `options.handle`, status of top-level calls |
 | `synergos/src/component/scheduled.ts` | `defineScheduledComponent`: first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`, stop-during-start never schedules |
-| `synergos/src/caller/` | `DirectCaller` (in-process), `DispatchCaller` (publish a command; `onUndelivered`), `WorkerCaller` (consume a routing, publish replies; itself an `IComponent`; `onUnrouted`). Both bus callers require an `IMessageBus` |
+| `synergos/src/component/lifecycle.ts` | Internal (not exported): `createLifecycle(acquire)` → `{ start, stop }`; a `start()` joins one in flight, a `stop()` waits for it and releases, a failed `start()` can be retried. Used by `RemoteWorker` and `defineScheduledComponent` |
+| `synergos/src/dispatcher/` | `IDispatcher` → `{ correlationId, delivered }`. `LocalDispatcher` (in-process, returns forwarded events as `replies`, optional `reply` component, no lifecycle), `RemoteDispatcher` (publishes a command; `delivered` = `publish()` result; `onUndelivered`) |
+| `synergos/src/dispatcher/wire.ts` | Internal (not exported): `correlate`, `toMessage`, `fromMessage` (the only wire cast), `toForwardedMessage` (drops `attempt` / `timestamp` / `persistent` / `routing`) |
+| `synergos/src/worker/` | `RemoteWorker`: consumes a routing into an `ICallable`, publishes forwarded events (replies and unhandled commands) to `reply`, else `onUnrouted`; an undelivered forwarded event → `onUndelivered`, the command still settles. Itself an `IComponent` on `createLifecycle` |
 | `synergos/src/message-bus/` | `IMessageBus` + `MessageBus` (type dispatch with `'*'` fallback; `onPublish` / `onConsume` / `onUnhandled` / `onError` hooks), `IMessageBusDriver` / `IMessageBusConsumer`, `MemoryMessageBusDriver` (WORK round-robin, PUB_SUB fan-out, `cancel()` awaits in-flight handlers), `buildMessage` / `isMessage` / `serializeMessage` |
 | `synergos/src/hook/` | `invokeHook(hooks, name, ...args)`: calls a hook with `hooks` as `this` and ignores a throw or a rejected promise |
 | `amqp/src/` | `AmqpMessageBusDriver`: routing → exchange/queue options, publish properties, decode + guard (`onMalformed`), retry/drop reporting (`onRetry` / `onDrop`); retry and the redelivery guard are amqp-extension's |
@@ -68,8 +72,8 @@ synergos/
 ## Hooks
 
 Every observable event is an optional, typed hook on the class's `hooks` option; the hook
-types sit in the module's `types.ts` (`MessageBusHooks`, `DispatchCallerHooks`,
-`WorkerCallerHooks`, `ScheduledComponentHooks`, `AmqpMessageBusDriverHooks`). Call them only
+types sit in the module's `types.ts` (`MessageBusHooks`, `RemoteDispatcherHooks`,
+`RemoteWorkerHooks`, `ScheduledComponentHooks`, `AmqpMessageBusDriverHooks`). Call them only
 through `invokeHook`: hooks observe and must never change an outcome — every hook site can sit
 on a consume path, where a propagated error would turn an ack into a retry.
 
@@ -103,7 +107,7 @@ Both packages publish only `dist/` (plus README/LICENSE) with a single `.` expor
 ## Separation of Concerns
 
 - **Library code** → `packages/<pkg>/src/`
-- **Tests** → `packages/<pkg>/test/unit/` (the spec `describe` names the source path, e.g. `describe('src/caller/dispatch', ...)`)
+- **Tests** → `packages/<pkg>/test/unit/` (the spec `describe` names the source path, e.g. `describe('src/dispatcher/remote', ...)`)
 - **Build / bundling** → `packages/<pkg>/tsdown.config.ts`; orchestration → `nx.json`
 - **Lint / style / commit rules** → shared `@tada5hi/*` configs, thinly wrapped by the root config files
 - **CI, release, dependency updates** → `.github/`

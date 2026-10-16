@@ -1,4 +1,3 @@
-export * from './caller';
 export * from './component';
 export * from './dispatcher';
 export * from './hook';
