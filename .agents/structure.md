@@ -60,7 +60,7 @@ synergos/
 | Module | Purpose |
 |---|---|
 | `synergos/src/component/module.ts` | `Component`: key → handler map, `'*'` fallback, per-handler memoized `initialize()`, child events via `context.handle`, unhandled → `options.handle`, status of top-level calls |
-| `synergos/src/component/scheduled.ts` | `defineScheduledComponent`: first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`, stop-during-start never schedules |
+| `synergos/src/component/scheduled.ts` | `defineScheduledComponent`: first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`, stop-during-start runs no tick |
 | `synergos/src/component/lifecycle.ts` | Internal (not exported): `createLifecycle(acquire)` → `{ start, stop }`; a `start()` joins one in flight, a `stop()` waits for it and releases, a failed `start()` can be retried. Used by `RemoteWorker` and `defineScheduledComponent` |
 | `synergos/src/dispatcher/` | `IDispatcher` → `{ correlationId, delivered }`. `LocalDispatcher` (in-process, returns forwarded events as `replies`, optional `reply` component, no lifecycle), `RemoteDispatcher` (publishes a command; `delivered` = `publish()` result; `onUndelivered`) |
 | `synergos/src/dispatcher/wire.ts` | Internal (not exported): `correlate`, `toMessage`, `fromMessage` (the only wire cast), `toForwardedMessage` (drops `attempt` / `timestamp` / `persistent` / `routing`) |

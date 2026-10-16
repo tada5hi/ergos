@@ -177,8 +177,10 @@ if (!result.delivered) await local.dispatch('build', data);
 
 ### Wire codec (internal)
 
-- `toMessage(key, data, metadata, routing)`: removes `attempt`, `timestamp`, `persistent` and
-  `routing` from the metadata, then `buildMessage({ type: key, data, metadata: { ...rest, routing } })`.
+- `toMessage(key, data, metadata, routing)`: keeps the caller's metadata (a dispatcher-given
+  `persistent` reaches the command), then `buildMessage({ type: key, data, metadata: { ...metadata, routing } })`.
+- `toForwardedMessage(event, routing)`: removes `attempt`, `timestamp`, `persistent` and `routing`
+  from the forwarded event's metadata, then builds the message like `toMessage`.
   `buildMessage` keeps `timestamp` first, so the body stays byte-compatible with hub's.
 - `fromMessage(message)`: `{ key: message.type, data: message.data, metadata: message.metadata }`
   — the only cast at the wire boundary.

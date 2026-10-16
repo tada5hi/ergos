@@ -180,8 +180,8 @@ await cleaner.stop();
 - `start()` runs a first pass before scheduling. Pass `runOnStart: false` to wait for the first tick.
 - Passes never overlap: a tick while a pass is still running is skipped.
 - A failing pass goes to `hooks.onError` and never rejects. The next tick simply runs again.
-- `stop()` during the first pass prevents the schedule from being created, and waits for that pass
-  to settle.
+- `stop()` during the first pass waits for that pass to settle and stops the schedule before its
+  first tick.
 
 ## Message bus
 
