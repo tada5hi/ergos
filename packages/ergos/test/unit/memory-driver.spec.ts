@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryMessageBusDriver, buildMessageBusPayload } from '../../src';
-import type { MessageBusRouting } from '../../src';
+import { MemoryMessageBusDriver, buildMessage } from '../../src';
+import type { MessageRouting } from '../../src';
 
-const work: MessageBusRouting = { type: 'work', key: 'jobs' };
-const pubSub: MessageBusRouting = { type: 'pubSub', key: 'events' };
+const work: MessageRouting = { type: 'work', key: 'jobs' };
+const pubSub: MessageRouting = { type: 'pubSub', key: 'events' };
 
-const message = (routing: MessageBusRouting) => buildMessageBusPayload({ type: 'run', metadata: { routing } });
+const message = (routing: MessageRouting) => buildMessage({ type: 'run', metadata: { routing } });
 
 describe('src/message-bus/memory', () => {
     it('should resolve false when no consumer matches', async () => {

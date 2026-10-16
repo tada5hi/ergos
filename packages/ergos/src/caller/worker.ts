@@ -5,23 +5,23 @@ import type {
     IComponent,
 } from '../component';
 import type { IMessageBusConsumer, MessageBus } from '../message-bus';
-import { buildMessageBusPayload } from '../message-bus';
+import { buildMessage } from '../message-bus';
 import type {
-    ComponentCallerPayload,
-    IComponentCaller,
-    MessageBusWorkerComponentCallerOptions,
+    CallerPayload,
+    ICaller,
+    WorkerCallerOptions,
 } from './types';
 
 /**
  * Consumes a routing into a component and publishes the component's
  * unhandled child events (the replies) to `publishRouting`.
  */
-export class MessageBusWorkerComponentCaller<
+export class WorkerCaller<
     EventMap extends ComponentEventMap = ComponentEventMap,
-> implements IComponentCaller<EventMap>, IComponent<EventMap> {
+> implements ICaller<EventMap>, IComponent<EventMap> {
     protected component: IComponent<EventMap>;
 
-    protected options: MessageBusWorkerComponentCallerOptions;
+    protected options: WorkerCallerOptions;
 
     protected messageBus?: MessageBus;
 
@@ -29,7 +29,7 @@ export class MessageBusWorkerComponentCaller<
 
     protected consumer?: IMessageBusConsumer;
 
-    constructor(component: IComponent<EventMap>, options: MessageBusWorkerComponentCallerOptions) {
+    constructor(component: IComponent<EventMap>, options: WorkerCallerOptions) {
         this.component = component;
         this.options = options;
         this.messageBus = options.messageBus;
@@ -48,10 +48,10 @@ export class MessageBusWorkerComponentCaller<
             this.options.consumeRouting,
             // The wire can not vouch for the event map; an unknown type
             // resolves like any unhandled key (Component semantics).
-            (payload) => this.call(
-                payload.type as keyof EventMap & string,
-                payload.data as EventMap[keyof EventMap & string][0],
-                payload.metadata as EventMap[keyof EventMap & string][1],
+            (message) => this.call(
+                message.type as keyof EventMap & string,
+                message.data as EventMap[keyof EventMap & string][0],
+                message.metadata as EventMap[keyof EventMap & string][1],
             ),
         );
     }
@@ -74,7 +74,7 @@ export class MessageBusWorkerComponentCaller<
 
     async call<K extends keyof EventMap & string>(
         key: K,
-        ...payload: ComponentCallerPayload<EventMap[K]>
+        ...payload: CallerPayload<EventMap[K]>
     ): Promise<void> {
         const { component } = this;
         if (!component.handle) {
@@ -103,7 +103,7 @@ export class MessageBusWorkerComponentCaller<
                 delete metadata.attempt;
                 delete metadata.timestamp;
                 delete metadata.persistent;
-                await messageBus.publish(buildMessageBusPayload({
+                await messageBus.publish(buildMessage({
                     type: childContext.key,
                     data: childData,
                     metadata: { ...metadata, routing: publishRouting },

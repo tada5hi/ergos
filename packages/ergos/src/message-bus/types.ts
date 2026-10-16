@@ -1,8 +1,8 @@
 import type { ObjectLiteral } from '../types';
-import type { MessageBusRoutingType } from './constants';
+import type { MessageRoutingType } from './constants';
 
-export type MessageBusRouting = {
-    type: `${MessageBusRoutingType}`,
+export type MessageRouting = {
+    type: `${MessageRoutingType}`,
     key: string,
     namespace?: string,
     /**
@@ -13,47 +13,47 @@ export type MessageBusRouting = {
     ordered?: boolean,
 };
 
-export type MessageBusPayloadMetadata = {
+export type MessageMetadata = {
     timestamp: number,
     persistent?: boolean,
-    routing: MessageBusRouting,
+    routing: MessageRouting,
 };
 
 export type MessageBusPublishOptions = {
     logging?: boolean,
 };
 
-export type MessageBusPayload<
+export type Message<
     T = string,
     D = ObjectLiteral,
 > = {
     id: string,
     type: T,
     data: D,
-    metadata: MessageBusPayloadMetadata,
+    metadata: MessageMetadata,
 };
 
-export type MessageBusPayloadMetadataInput = Partial<Pick<MessageBusPayloadMetadata, 'timestamp'>> &
-    Omit<MessageBusPayloadMetadata, 'timestamp'>;
+export type MessageMetadataInput = Partial<Pick<MessageMetadata, 'timestamp'>> &
+    Omit<MessageMetadata, 'timestamp'>;
 
-export type MessageBusPayloadInput<
+export type MessageInput<
     T = string,
     D = ObjectLiteral,
 > = {
     id?: string,
     type: T,
     data?: D,
-    metadata: MessageBusPayloadMetadataInput,
+    metadata: MessageMetadataInput,
 };
 
-export type MessageBusHandler<
+export type MessageHandler<
     T = string,
     D = ObjectLiteral,
-> = (message: MessageBusPayload<T, D>) => Promise<void> | void;
+> = (message: Message<T, D>) => Promise<void> | void;
 
-export type MessageBusHandlers = {
-    $any?: MessageBusHandler,
-    [type: string]: MessageBusHandler | undefined,
+export type MessageHandlers = {
+    '*'?: MessageHandler,
+    [type: string]: MessageHandler | undefined,
 };
 
 export interface IMessageBusConsumer {
@@ -67,7 +67,7 @@ export interface IMessageBusDriver {
     /**
      * Resolves true once a consumer (memory) or the broker (amqp) accepted it.
      */
-    publish(routing: MessageBusRouting, message: MessageBusPayload): Promise<boolean>;
-    consume(routing: MessageBusRouting, handler: MessageBusHandler): Promise<IMessageBusConsumer>;
+    publish(routing: MessageRouting, message: Message): Promise<boolean>;
+    consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer>;
     close?(): Promise<void>;
 }

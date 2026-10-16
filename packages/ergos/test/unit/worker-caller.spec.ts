@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+    DispatchCaller,
     MemoryMessageBusDriver,
     MessageBus,
-    MessageBusDispatchComponentCaller,
-    MessageBusWorkerComponentCaller,
+    WorkerCaller,
 } from '../../src';
-import type { MessageBusPayload, MessageBusRouting } from '../../src';
+import type { Message, MessageRouting } from '../../src';
 import { TestComponent } from './fakes/component';
 import { FakeLogger } from './fakes/logger';
 
-const consumeRouting: MessageBusRouting = { type: 'work', key: 'commands' };
-const publishRouting: MessageBusRouting = { type: 'work', key: 'replies' };
+const consumeRouting: MessageRouting = { type: 'work', key: 'commands' };
+const publishRouting: MessageRouting = { type: 'work', key: 'replies' };
 
 function setup() {
     const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
     const component = new TestComponent();
     const logger = new FakeLogger();
-    const dispatcher = new MessageBusDispatchComponentCaller({ routing: consumeRouting, messageBus });
+    const dispatcher = new DispatchCaller({ routing: consumeRouting, messageBus });
 
     return {
         messageBus, 
@@ -33,10 +33,10 @@ describe('src/caller/worker', () => {
             component, 
             dispatcher,
         } = setup();
-        const replies: MessageBusPayload[] = [];
-        await messageBus.consumeAny(publishRouting, (payload) => { replies.push(payload); });
+        const replies: Message[] = [];
+        await messageBus.consumeAny(publishRouting, (message) => { replies.push(message); });
 
-        const worker = new MessageBusWorkerComponentCaller(component, {
+        const worker = new WorkerCaller(component, {
             consumeRouting, 
             publishRouting, 
             messageBus, 
@@ -57,10 +57,10 @@ describe('src/caller/worker', () => {
             component,
             dispatcher,
         } = setup();
-        const replies: MessageBusPayload[] = [];
-        await messageBus.consumeAny(publishRouting, (payload) => { replies.push(payload); });
+        const replies: Message[] = [];
+        await messageBus.consumeAny(publishRouting, (message) => { replies.push(message); });
 
-        const worker = new MessageBusWorkerComponentCaller(component, {
+        const worker = new WorkerCaller(component, {
             consumeRouting,
             publishRouting,
             messageBus,
@@ -79,10 +79,10 @@ describe('src/caller/worker', () => {
             component,
             dispatcher,
         } = setup();
-        const replies: MessageBusPayload[] = [];
-        await messageBus.consumeAny(publishRouting, (payload) => { replies.push(payload); });
+        const replies: Message[] = [];
+        await messageBus.consumeAny(publishRouting, (message) => { replies.push(message); });
 
-        const worker = new MessageBusWorkerComponentCaller(component, {
+        const worker = new WorkerCaller(component, {
             consumeRouting,
             publishRouting,
             messageBus,
@@ -105,7 +105,7 @@ describe('src/caller/worker', () => {
             logger, 
             dispatcher,
         } = setup();
-        const worker = new MessageBusWorkerComponentCaller(component, {
+        const worker = new WorkerCaller(component, {
             consumeRouting, 
             messageBus, 
             logger, 
@@ -124,7 +124,7 @@ describe('src/caller/worker', () => {
             component, 
             dispatcher, 
         } = setup();
-        const worker = new MessageBusWorkerComponentCaller(component, {
+        const worker = new WorkerCaller(component, {
             consumeRouting, 
             publishRouting, 
             messageBus, 
@@ -143,7 +143,7 @@ describe('src/caller/worker', () => {
         const blocker = Promise.withResolvers<void>();
         component.blocker = blocker.promise;
 
-        const worker = new MessageBusWorkerComponentCaller(component, { consumeRouting, messageBus });
+        const worker = new WorkerCaller(component, { consumeRouting, messageBus });
         await worker.start();
 
         const order: string[] = [];
@@ -169,7 +169,7 @@ describe('src/caller/worker', () => {
     it('should start the component and warn without a message bus', async () => {
         const component = new TestComponent();
         const logger = new FakeLogger();
-        const worker = new MessageBusWorkerComponentCaller(component, { consumeRouting, logger });
+        const worker = new WorkerCaller(component, { consumeRouting, logger });
 
         await worker.start();
         await worker.stop();
@@ -180,7 +180,7 @@ describe('src/caller/worker', () => {
 
     it('should delegate status to the component', async () => {
         const { messageBus, component } = setup();
-        const worker = new MessageBusWorkerComponentCaller(component, { consumeRouting, messageBus });
+        const worker = new WorkerCaller(component, { consumeRouting, messageBus });
 
         await worker.call('execute', { id: 'a' }, {});
         expect(worker.status()).toEqual(component.status());

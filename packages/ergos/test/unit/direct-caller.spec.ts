@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Component, DirectComponentCaller } from '../../src';
+import { Component, DirectCaller } from '../../src';
 import type { ComponentMetadata, IComponent } from '../../src';
 import { TestComponent } from './fakes/component';
 
 describe('src/caller/direct', () => {
     it('should return the events the component emitted', async () => {
-        const caller = new DirectComponentCaller(new TestComponent());
+        const caller = new DirectCaller(new TestComponent());
         await expect(caller.callAndWait('execute', { id: 'a' }, {}))
             .resolves.toEqual({ executionFinished: { id: 'a' } });
     });
@@ -14,7 +14,7 @@ describe('src/caller/direct', () => {
         const seen: (string | undefined)[] = [];
         const component = new Component<{ run: [Record<string, unknown>, ComponentMetadata] }>();
         component.mount('run', (_data, ctx) => { seen.push(ctx.metadata.correlationId); });
-        const caller = new DirectComponentCaller(component);
+        const caller = new DirectCaller(component);
 
         await caller.call('run', {}, {});
         await caller.call('run', {}, { correlationId: 'given' });
@@ -25,7 +25,7 @@ describe('src/caller/direct', () => {
     });
 
     it('should resolve an unknown command, reporting it as unhandled', async () => {
-        const caller = new DirectComponentCaller(new Component());
+        const caller = new DirectCaller(new Component());
         await expect(caller.callAndWait('nope', {}, {})).resolves.toEqual({ nope: {} });
     });
 
@@ -35,6 +35,6 @@ describe('src/caller/direct', () => {
             stop: () => Promise.resolve(),
             status: () => ({}),
         };
-        await expect(new DirectComponentCaller(component).call('run', {}, {})).rejects.toThrow();
+        await expect(new DirectCaller(component).call('run', {}, {})).rejects.toThrow();
     });
 });
