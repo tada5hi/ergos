@@ -74,7 +74,7 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
             // per-message TTL: the broker drops it; MessageBus drops one that still arrives late
             ...(message.metadata.expiresAt === undefined ?
                 {} :
-                { expiration: String(Math.max(0, message.metadata.expiresAt - Date.now())) }),
+                { expiration: String(Math.max(0, Math.ceil(message.metadata.expiresAt - Date.now()))) }),
             ...this.resolveQueueOptions(routing),
         });
     }

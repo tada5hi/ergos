@@ -336,17 +336,22 @@ describe('src/module', () => {
         later.metadata.expiresAt = Date.now() + 60_000;
         const past = message(shapes.work);
         past.metadata.expiresAt = 0;
+        const fractional = message(shapes.work);
+        fractional.metadata.expiresAt = Date.now() + 1000 / 3;
 
         await driver.publish(shapes.work, later);
         await driver.publish(shapes.work, past);
         await driver.publish(shapes.work, message(shapes.work));
+        await driver.publish(shapes.work, fractional);
 
-        const [first, second, third] = client.publishes.map((entry) => entry.options.expiration);
+        const [first, second, third, fourth] = client.publishes.map((entry) => entry.options.expiration);
         expect(Number(first)).toBeGreaterThan(59_000);
         expect(Number(first)).toBeLessThanOrEqual(60_000);
         expect(first).toBeTypeOf('string');
         expect(second).toBe('0');
         expect(third).toBeUndefined();
+        // the broker only takes an integer
+        expect(fourth).toMatch(/^\d+$/);
     });
 
     it('should create a client lazily from a connection string', async () => {
