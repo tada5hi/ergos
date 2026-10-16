@@ -17,6 +17,12 @@ export type MessageRouting = {
      * and every consumer without one gets its own copy. Publishers omit it.
      */
     queue?: string,
+    /**
+     * Publish only: whether the routing's messages survive a broker restart
+     * (amqp default: WORK yes, PUB_SUB no). A message's metadata.persistent
+     * wins. The memory driver ignores it.
+     */
+    persistent?: boolean,
 };
 
 export type MessageMetadata = {

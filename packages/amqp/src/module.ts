@@ -71,7 +71,7 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
         await this.resolveExchange(routing).publish(routing.key, serializeMessage(message), {
             type: message.type,
             messageId: message.id,
-            persistent: message.metadata.persistent ?? routing.type === MessageRoutingType.WORK,
+            persistent: message.metadata.persistent ?? routing.persistent ?? routing.type === MessageRoutingType.WORK,
             // per-message TTL: the broker drops it; MessageBus drops one that still arrives late
             ...(message.metadata.expiresAt === undefined ?
                 {} :

@@ -230,6 +230,7 @@ dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_
 | `key` | The queue (work) or routing key (pubSub) |
 | `namespace` | Optional. Separates routings with the same key, e.g. an exchange name in the amqp driver |
 | `ordered` | `work` only: one consumer and one handler at a time, in publish order, with failover to another replica. A retried message re-enters at the end of the queue, behind the ones published after it |
+| `persistent` | Optional. Whether the routing's messages survive a broker restart (amqp default: `work` yes, `pubSub` no); a message's `metadata.persistent` wins. The memory driver ignores it |
 | `queue` | `pubSub` consume only: a durable subscription. Consumers naming the same queue share its messages (each once, retried like `work`); each queue name gets its own copy. Publishers omit it |
 
 ### Consuming
@@ -390,7 +391,8 @@ next one. Dispatchers and workers treat both kinds the same.
 
 A `RemoteWorker` passes an inbound command's metadata to the component unchanged, including the
 driver's `delivery`. The events it publishes keep the rest of the metadata (such as the
-`correlationId`) but drop the command's `delivery`, `timestamp`, `persistent`, `expiresAt` and `routing`.
+`correlationId`) but drop the command's `delivery`, `timestamp`, `persistent`, `expiresAt` and `routing`;
+the `persistent` of its `publish` routing applies instead.
 Likewise, a `RemoteDispatcher` never sends a caller's `delivery`, `timestamp` or `routing`, so
 dispatching with an inbound `context.metadata` (to keep the `correlationId`) starts a fresh command;
 only a `persistent` or `expiresAt` the caller passes is kept. A `LocalDispatcher` hands the metadata to the

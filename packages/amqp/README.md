@@ -120,7 +120,7 @@ Each `MessageRouting` maps onto an exchange and a queue:
 | `{ type: 'pubSub', key }` | Topic exchange `namespace`, else `defaultTopicExchange` | Exclusive temporary queue per consumer, bound to `key` | no | no |
 | `{ type: 'pubSub', key, queue }` (consume) | As above | Durable queue named `queue`, bound to `key`, shared by the consumers naming it | no | yes |
 
-A message's `metadata.persistent` overrides the persistence of its routing. Its `metadata.expiresAt`
+A routing's `persistent` overrides that column, and a message's `metadata.persistent` overrides both. Its `metadata.expiresAt`
 becomes the AMQP `expiration` (the remaining ms), so the broker drops it unconsumed; one that still
 arrives late is dropped by `MessageBus` (`onExpired`). Only a `work` routing and a `pubSub` `queue`
 keep messages while no consumer is connected and split them between replicas.
@@ -135,10 +135,10 @@ and `key` reaches it too: give them distinct keys.
 A `pubSub` `queue` is a durable fan-out subscription: each service names its own queue (e.g.
 `hub-core-authup-events`) and gets its own copy, its replicas share it. Only the consumer passes
 `queue`; the publisher's routing stays `{ type: 'pubSub', key, namespace }` and declares no queue, so
-the two never conflict. The queue keeps messages from the first consume on. Set
-`metadata.persistent: true` on the publisher for them to survive a broker restart; a `RemoteWorker`
-drops `persistent` from the events it forwards, so publish such events through a `RemoteDispatcher`
-or `MessageBus.publish()`.
+the two never conflict. The queue keeps messages from the first consume on. Set `persistent: true`
+on the publisher's routing (or `metadata.persistent: true` on a message) for them to survive a
+broker restart; a `RemoteWorker` drops the command's `metadata.persistent` from the events it
+forwards, so give its `publish` routing `persistent: true`.
 
 `publish()` resolves once the broker has confirmed the message, and rejects when it refuses
 it or the driver was closed. The driver passes synergos'

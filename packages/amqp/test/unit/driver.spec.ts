@@ -3,7 +3,13 @@ import type { ConsumeMessage } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
 import { AmqpMessageBusDriver } from '../../src';
 import type { AmqpMalformedMessage, AmqpMessageBusDriverHooks } from '../../src';
-import { buildMessage } from 'synergos';
+import { setImmediate as tick } from 'node:timers/promises';
+import {
+    Component,
+    MessageBus,
+    RemoteWorker,
+    buildMessage,
+} from 'synergos';
 import type { Message, MessageRouting } from 'synergos';
 import { defineDriverConformance } from 'synergos/conformance';
 import { FakeAmqpClient } from './fakes/amqp-client';
@@ -356,6 +362,42 @@ describe('src/module', () => {
         await createDriver(client).publish(shapes.work, input);
 
         expect(client.publishes[0]?.options.persistent).toBe(false);
+    });
+
+    it('should make a routing persistent, a message flag still winning', async () => {
+        const client = new FakeAmqpClient();
+        const routing: MessageRouting = { ...shapes.pubSub, persistent: true };
+        const opted = message(routing);
+        opted.metadata.persistent = false;
+
+        await createDriver(client).publish(routing, message(routing));
+        await createDriver(client).publish(routing, opted);
+
+        expect(client.publishes.map((item) => item.options.persistent)).toEqual([true, false]);
+    });
+
+    it('should publish a RemoteWorker\'s events persistent through a persistent routing', async () => {
+        const client = FakeAmqpClient.loopback();
+        const messageBus = new MessageBus({ driver: createDriver(client) });
+        const component = new Component();
+        component.mount('execute', async (data, ctx) => {
+            await ctx.handle('executed', data);
+        });
+        await new RemoteWorker(component, {
+            messageBus,
+            consume: shapes.work,
+            publish: { ...shapes.pubSub, persistent: true },
+        }).start();
+
+        const command = message(shapes.work);
+        command.metadata.persistent = false;
+        await messageBus.publish(command);
+        await tick();
+
+        expect(client.publishes.map((item) => [item.key, item.options.persistent])).toEqual([
+            ['tasks', false],
+            ['events', true],
+        ]);
     });
 
     it('should map expiresAt to the expiration property (remaining ms, never negative)', async () => {
