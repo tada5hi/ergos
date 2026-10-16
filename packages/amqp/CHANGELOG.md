@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/tada5hi/hubwire/compare/amqp-v0.2.0...amqp-v0.2.1) (2026-10-16)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @hubwire/test bumped from ^0.1.0 to ^0.1.1
+    * hubwire bumped from ^0.2.0 to ^0.2.1
+  * peerDependencies
+    * hubwire bumped from ^0.2.0 to ^0.2.1
+
 ## [0.2.0](https://github.com/tada5hi/hubwire/compare/amqp-v0.1.0...amqp-v0.2.0) (2026-10-16)
 
 

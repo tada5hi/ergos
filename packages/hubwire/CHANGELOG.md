@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/tada5hi/hubwire/compare/hubwire-v0.2.0...hubwire-v0.2.1) (2026-10-16)
+
+
+### Features
+
+* optional settled() on IComponent ([#21](https://github.com/tada5hi/hubwire/issues/21)) ([245ec29](https://github.com/tada5hi/hubwire/commit/245ec294f05933429882ceb0d053fbeec99e63dc))
+
 ## [0.2.0](https://github.com/tada5hi/hubwire/compare/hubwire-v0.1.0...hubwire-v0.2.0) (2026-10-16)
 
 
