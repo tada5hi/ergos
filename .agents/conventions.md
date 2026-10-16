@@ -4,9 +4,10 @@
 
 | Tool                          | Purpose                                                                       |
 |-------------------------------|-------------------------------------------------------------------------------|
-| tsdown                        | Bundles `src/index.ts` → `dist/` (ESM + `.d.mts` + sourcemaps)                 |
+| npm workspaces + nx           | `packages/*`; root scripts run `nx run-many -t <target>` across packages       |
+| tsdown                        | Bundles each package's `src/index.ts` → `dist/` (ESM + `.d.mts` + sourcemaps)  |
 | TypeScript                    | Type checking only (`noEmit: true`); base config from `@tada5hi/tsconfig`      |
-| ESLint (flat config)          | Linting via `@tada5hi/eslint-config`; `dist/**` ignored                        |
+| ESLint (flat config)          | One root config via `@tada5hi/eslint-config`; `**/dist/**`, `**/coverage/**` ignored |
 | Vitest                        | Test runner and v8 coverage — see [testing](testing.md)                        |
 | commitlint                    | Conventional Commits enforcement via `@tada5hi/commitlint-config`              |
 | husky                         | Sets `core.hooksPath`; installed by the `prepare` script                       |
@@ -18,12 +19,14 @@ The three `@tada5hi/*` config packages are the source of truth for style, TS, an
 
 ## Workflow
 
-- After making changes, **always run `npm run build` and `npm run lint`**, plus `npm run test` when behavior changed.
+- After making changes, **always run `npm run build`, `npm run typecheck` and `npm run lint`** (from the root), plus `npm run test` when behavior changed.
 - `npm run lint:fix` auto-fixes most style violations — run it before hand-editing formatting.
 - Never edit `dist/` — it is generated and git-ignored.
-- Never hand-edit `.release-please-manifest.json` or the version in `package.json`; release-please owns both.
-- `node-cron` is the only runtime dependency of the core entry. New dependencies belong in `devDependencies` (or an optional peer of a subpath) unless the core genuinely ships code that imports them.
-- Contracts carry an `I` prefix and live in `types.ts`; classes `implements` them. No `as any`; a cast only where nothing can check the type (the wire boundary in the worker caller).
+- Never hand-edit `.release-please-manifest.json` or the versions in `packages/*/package.json`; release-please owns them.
+- `node-cron` is the only runtime dependency of `ergos`; it must never depend on amqp-extension. Transport-specific code goes in its own package (`@ergos/amqp`), which takes its transport as a real dependency and `ergos` as a peer + dev dependency at the workspace version. Shared tooling belongs in the root `devDependencies`.
+- Regenerate `package-lock.json` with a plain `npm install` — never `--package-lock-only` (drops other platforms' optional dependencies) or `--force`.
+- Contracts carry an `I` prefix and live in `types.ts`; classes `implements` them, and dependents take the contract (`IMessageBus`), not the class. No `as any`; a cast only where nothing can check the type (the wire boundary in the worker caller).
+- No logger: observable events are optional typed hooks on a `hooks` option (`on*`), declared in `types.ts` and called through `invokeHook`, which ignores a hook that throws or rejects. A hook must never change an outcome (ack vs. retry, resolve vs. reject).
 
 ## Code Style
 
@@ -31,12 +34,12 @@ The three `@tada5hi/*` config packages are the source of truth for style, TS, an
 - **Indentation**: 4 spaces (`.editorconfig`), including JSON, YAML, and TS.
 - **Line endings**: LF; UTF-8; trailing whitespace trimmed; final newline required (except in Markdown, where trailing whitespace is preserved).
 - **Semicolons**: required; **quotes**: single — both enforced by `@tada5hi/eslint-config`.
-- **Linting**: flat config in `eslint.config.js`, spreading `await config()` from `@tada5hi/eslint-config` and ignoring `dist/**`.
+- **Linting**: one flat config at the root (`eslint.config.js`), spreading `await config()` from `@tada5hi/eslint-config`.
 
 ## File Organization
 
-- `src/index.ts` is the public barrel. Anything not re-exported from it is internal and never published.
-- Add new implementation modules under `src/` as `kebab-case.ts` and re-export them from `index.ts`.
+- Each package's `src/index.ts` is its public barrel. Anything not re-exported from it is internal and never published.
+- Add new implementation modules under `packages/<pkg>/src/` as `kebab-case` directories/files and re-export them from `index.ts`.
 - Exported types (interfaces, type aliases) belong in a `types.ts` next to the implementation, re-exported through the nearest barrel.
 - Tests mirror the `src/` path under `test/unit/` — see [testing](testing.md).
 
@@ -70,49 +73,31 @@ Commits follow **[Conventional Commits](https://www.conventionalcommits.org)** �
 
 ## TypeScript
 
-- Extends `@tada5hi/tsconfig`; local overrides: `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `noEmit: true`, `allowImportingTsExtensions: true`.
-- `include` covers `src/**/*` only — `test/` is type-checked by Vitest/the editor, not by this config.
+- Root `tsconfig.build.json` extends `@tada5hi/tsconfig`; local overrides: `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `noEmit: true`, `allowImportingTsExtensions: true`. Root `tsconfig.json` adds `paths` mapping `ergos` / `@ergos/amqp` to their `src`.
+- Per package: `tsconfig.build.json` (src only, no paths — resolves siblings through `node_modules`/`dist`, so nx builds `ergos` first) backs `build:types`; `tsconfig.json` (src + test, paths-mapped) backs `typecheck`.
 - `moduleResolution: bundler` means imports are written without file extensions and resolved by tsdown; do not add `.js` extensions to relative imports.
 - Declarations are emitted by tsdown (`dts: true`), not by `tsc`.
 
 ## Build Output
 
-`npm run build` (tsdown) writes:
-
-| File                   | Contents                       |
-|------------------------|--------------------------------|
-| `dist/index.mjs`       | ESM bundle                     |
-| `dist/index.d.mts`     | Type declarations              |
-| `dist/index.mjs.map`   | Sourcemap                      |
-
-`dist/` is git-ignored and is the only directory published to npm.
+`npm run build` runs each package's `build:types` (`tsc --noEmit`) then `build:js` (tsdown), which writes `packages/<pkg>/dist/index.mjs`, `index.d.mts` and `index.mjs.map`. `dist/` is git-ignored and, with README and LICENSE, the only thing published to npm. In `@ergos/amqp`'s bundle, `ergos` and `amqp-extension` stay external imports.
 
 ## Release Process
 
 Automated by `.github/workflows/release.yml` on every push to `master`:
 
-1. **release-please** (`googleapis/release-please-action@v5`) opens or updates a release PR that bumps the version, updates `CHANGELOG.md`, and syncs `.release-please-manifest.json`.
-2. Merging that PR creates the git tag (`v`-prefixed, no component prefix) and a GitHub release.
-3. On that same run, `releases_created == 'true'` gates checkout → install → build → **publish** via `tada5hi/monoship@v2`.
+1. **release-please** (`googleapis/release-please-action@v5`, monorepo mode) opens or updates a release PR that bumps each changed package's version, updates its `CHANGELOG.md`, and syncs `.release-please-manifest.json`. The `node-workspace` plugin (`updatePeerDependencies: true`) bumps `@ergos/amqp`'s `ergos` range along with it.
+2. Merging that PR creates one git tag per released package (component-prefixed, e.g. `ergos-v0.1.0`, `amqp-v0.1.0`) and GitHub releases.
+3. On that same run, `releases_created == 'true'` gates checkout → install → build → **publish** via `tada5hi/monoship@v2`, which publishes every workspace package whose version is not yet on npm.
 
-Config lives in `release-please-config.json` (`release-type: node`, `include-v-in-tag: true`, `bump-minor-pre-major: true`). Releases are never cut by hand.
+Config lives in `release-please-config.json` (`release-type: node`, `bump-minor-pre-major: true`, `packages: { packages/ergos, packages/amqp }`). Releases are never cut by hand.
 
 ## CI/CD
 
-- `.github/workflows/main.yml` — CI on push/PR to `develop`, `master`, `next`, `beta`, `alpha`: install → build → lint + test in parallel. Node 24, concurrency group cancels superseded runs.
+- `.github/workflows/main.yml` — CI on push/PR to `develop`, `master`, `next`, `beta`, `alpha`: install → build → lint + typecheck + test in parallel. Node 24, concurrency group cancels superseded runs.
 - `.github/workflows/release.yml` — release-please + npm publish on `master`.
 - Both reuse the composite actions in `.github/actions/` (`install`, `build`) — change caching or the Node setup there, once, rather than per workflow.
-- `PRIMARY_NODE_VERSION` is pinned to `24` in each workflow's `env` block; `package.json` only requires `>=22`.
-
-## Using This Template
-
-This repository is a starting point, not a library. When bootstrapping a new project from it:
-
-1. Replace `name`, `description`, `keywords`, and repository URLs in `package.json`.
-2. Replace `src/index.ts` and `test/unit/index.spec.ts` with real code.
-3. Update `README.MD` — the badge URLs all embed `ergos` and the Codecov token.
-4. Reset `.release-please-manifest.json` to `0.0.0` if it has drifted.
-5. Update `AGENTS.md` and `.agents/*.md` to describe the new project.
+- `PRIMARY_NODE_VERSION` is pinned to `24` in each workflow's `env` block; the packages only require `>=22`.
 
 ## Best Practices
 

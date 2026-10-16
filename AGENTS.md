@@ -2,11 +2,19 @@
 
 # ergos — Agent Guide
 
-Components with a `start` / `stop` / `status` lifecycle and optional command handlers
-(`Component`, `IComponent`), cron-driven background jobs (`defineScheduledComponent`), and
-the message bus that routes commands and replies between components (`MessageBus`,
-`IMessageBusDriver`, `MemoryMessageBusDriver`, direct / dispatch / worker callers).
-Consumers: FLAME Hub and authup. ESM-only, one runtime dependency (`node-cron`).
+An npm workspaces monorepo with two packages:
+
+- **`ergos`** (`packages/ergos`) — components with a `start` / `stop` / `status` lifecycle and
+  optional command handlers (`Component`, `IComponent`), cron-driven background jobs
+  (`defineScheduledComponent`), and the message bus that routes commands and replies between
+  components (`IMessageBus` / `MessageBus`, `IMessageBusDriver`, `MemoryMessageBusDriver`,
+  `DirectCaller` / `DispatchCaller` / `WorkerCaller`). One runtime dependency (`node-cron`).
+- **`@ergos/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
+  [amqp-extension](https://www.npmjs.com/package/amqp-extension) (a real dependency);
+  `ergos` is a peer.
+
+Consumers: FLAME Hub and authup. ESM-only. Observability is through typed `hooks` options,
+not a logger.
 
 ## Quick Reference
 
@@ -14,23 +22,28 @@ Consumers: FLAME Hub and authup. ESM-only, one runtime dependency (`node-cron`).
 # Setup
 npm ci
 
-# Development
-npm run build          # bundle src/index.ts -> dist/ via tsdown
+# Development (root; nx run-many across packages/*)
+npm run build          # per package: tsc --noEmit (src) + tsdown -> dist/
 npm run test           # vitest, single run
 npm run test:coverage  # vitest with v8 coverage + 80% thresholds
-npm run lint           # eslint
+npm run typecheck      # tsc --noEmit over src + test, per package
+npm run lint           # eslint (root config, all packages)
 npm run lint:fix       # eslint --fix
+
+# One package
+npm run test -w packages/amqp
 ```
 
 - **Node.js**: `>=22.0.0` (CI runs on 24)
-- **Package manager**: npm (`package-lock.json` is committed; use `npm ci` in CI)
-- **Build tool**: [tsdown](https://tsdown.dev) — no build orchestrator, this is a single package
-
-There is no `typecheck` script. `tsconfig.json` sets `noEmit: true` and is used by the editor, ESLint and tsdown's type-aware passes; run `npx tsc --noEmit` if you need a standalone type check.
+- **Package manager**: npm workspaces (`package-lock.json` is committed; use `npm ci` in CI;
+  regenerate with a plain `npm install`, never `--package-lock-only` or `--force`)
+- **Build**: [tsdown](https://tsdown.dev) per package, orchestrated by [nx](https://nx.dev)
 
 ## Layout at a Glance
 
-Single package, no workspaces. `src/` holds the library, `test/unit/` holds the specs, `dist/` is generated and git-ignored.
+`packages/<name>/` each with `src/`, `test/unit/`, `test/vitest.config.ts`, `tsdown.config.ts`,
+`tsconfig.json` (src + test, paths-mapped to sibling sources) and `tsconfig.build.json` (src only).
+`dist/` is generated and git-ignored.
 
 ## Detailed Guides
 
