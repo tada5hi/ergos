@@ -1,6 +1,6 @@
 import type { ILogger, ObjectLiteral } from '../types';
 import type { ComponentEventMap, ComponentMetadata } from '../component';
-import type { MessageBus } from '../message-bus';
+import type { IMessageBus } from '../message-bus';
 import { buildMessage } from '../message-bus';
 import type {
     CallerPayload,
@@ -16,7 +16,7 @@ export class DispatchCaller<
 > implements ICaller<EventMap> {
     protected options: DispatchCallerOptions;
 
-    protected messageBus?: MessageBus;
+    protected messageBus: IMessageBus;
 
     protected logger?: ILogger;
 
@@ -29,11 +29,6 @@ export class DispatchCaller<
     call<K extends keyof EventMap & string>(key: K, ...payload: CallerPayload<EventMap[K]>): Promise<void>;
 
     async call(type: string, data: ObjectLiteral, metadata: ComponentMetadata): Promise<void> {
-        if (!this.messageBus) {
-            this.logger?.warn(`Can not publish ${type} event.`);
-            return;
-        }
-
         const published = await this.messageBus.publish(
             buildMessage({
                 type,

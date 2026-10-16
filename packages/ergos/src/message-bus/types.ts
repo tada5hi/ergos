@@ -1,4 +1,4 @@
-import type { ObjectLiteral } from '../types';
+import type { ILogger, ObjectLiteral } from '../types';
 import type { MessageRoutingType } from './constants';
 
 export type MessageRouting = {
@@ -61,6 +61,30 @@ export interface IMessageBusConsumer {
      * Stop receiving messages. Resolves once the handlers in flight settled.
      */
     cancel(): Promise<void>;
+}
+
+export type MessageBusOptions = {
+    driver: IMessageBusDriver,
+    logger?: ILogger,
+};
+
+/**
+ * What callers and components depend on; MessageBus is the implementation.
+ */
+export interface IMessageBus {
+    /**
+     * Resolves true once a consumer (memory) or the broker (amqp) accepted it.
+     */
+    publish(message: Message, options?: MessageBusPublishOptions): Promise<boolean>;
+    /**
+     * A handler for the message type wins over '*'. A message no handler
+     * accepts is settled (acked) without error.
+     */
+    consume(routing: MessageRouting, handlers: MessageHandlers): Promise<IMessageBusConsumer>;
+    /**
+     * consume() with a single '*' handler.
+     */
+    consumeAny(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer>;
 }
 
 export interface IMessageBusDriver {

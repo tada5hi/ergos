@@ -4,7 +4,7 @@ import type {
     ComponentStatus,
     IComponent,
 } from '../component';
-import type { IMessageBusConsumer, MessageBus } from '../message-bus';
+import type { IMessageBus, IMessageBusConsumer } from '../message-bus';
 import { buildMessage } from '../message-bus';
 import type {
     CallerPayload,
@@ -23,7 +23,7 @@ export class WorkerCaller<
 
     protected options: WorkerCallerOptions;
 
-    protected messageBus?: MessageBus;
+    protected messageBus: IMessageBus;
 
     protected logger?: ILogger;
 
@@ -38,11 +38,6 @@ export class WorkerCaller<
 
     async start(): Promise<void> {
         await this.component.start();
-
-        if (!this.messageBus) {
-            this.logger?.warn(`Can not consume queue for component ${this.component.constructor.name}`);
-            return;
-        }
 
         this.consumer = await this.messageBus.consumeAny(
             this.options.consumeRouting,
@@ -81,11 +76,6 @@ export class WorkerCaller<
             throw new Error(`Component ${component.constructor.name} can not be called.`);
         }
 
-        const { messageBus } = this;
-        if (!messageBus) {
-            throw new Error(`MessageBus is not available for component ${component.constructor.name}.`);
-        }
-
         await component.handle(key, payload[0], payload[1], {
             handle: async (childData, childContext) => {
                 const { publishRouting } = this.options;
@@ -103,7 +93,7 @@ export class WorkerCaller<
                 delete metadata.attempt;
                 delete metadata.timestamp;
                 delete metadata.persistent;
-                await messageBus.publish(buildMessage({
+                await this.messageBus.publish(buildMessage({
                     type: childContext.key,
                     data: childData,
                     metadata: { ...metadata, routing: publishRouting },

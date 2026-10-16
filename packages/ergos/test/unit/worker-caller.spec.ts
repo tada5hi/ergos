@@ -166,17 +166,6 @@ describe('src/caller/worker', () => {
         expect(component.handled).toEqual(['a']);
     });
 
-    it('should start the component and warn without a message bus', async () => {
-        const component = new TestComponent();
-        const logger = new FakeLogger();
-        const worker = new WorkerCaller(component, { consumeRouting, logger });
-
-        await worker.start();
-        await worker.stop();
-
-        expect(component.lifecycle).toEqual(['start', 'stop']);
-        expect(logger.messages('warn')).toHaveLength(1);
-    });
 
     it('should delegate status to the component', async () => {
         const { messageBus, component } = setup();

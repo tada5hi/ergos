@@ -1,6 +1,6 @@
 import type { ILogger } from '../types';
 import type { ComponentEventMap, ComponentEventMapValue } from '../component';
-import type { MessageBus, MessageRouting } from '../message-bus';
+import type { IMessageBus, MessageRouting } from '../message-bus';
 
 export type CallerPayload<V extends ComponentEventMapValue = ComponentEventMapValue> = [
     data: V[0],
@@ -21,7 +21,7 @@ export type DispatchCallerOptions = {
      * Debug-log each publish. Default: true
      */
     logging?: boolean,
-    messageBus?: MessageBus,
+    messageBus: IMessageBus,
     logger?: ILogger,
 };
 
@@ -31,6 +31,6 @@ export type WorkerCallerOptions = {
      * Where unhandled child events (the replies) are published.
      */
     publishRouting?: MessageRouting,
-    messageBus?: MessageBus,
+    messageBus: IMessageBus,
     logger?: ILogger,
 };
