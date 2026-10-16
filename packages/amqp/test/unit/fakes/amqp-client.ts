@@ -23,6 +23,7 @@ export type FakeAmqpConsume = {
 type FakeAmqpLog = {
     publishes: FakeAmqpPublish[],
     consumes: FakeAmqpConsume[],
+    closed?: number,
     loopback?: { index: number },
 };
 
@@ -57,6 +58,8 @@ export class FakeAmqpClient implements IAmqpClient {
     get publishes() { return this.log.publishes; }
 
     get consumes() { return this.log.consumes; }
+
+    get closed() { return this.log.closed ?? 0; }
 
     of(exchange: Exchange): FakeAmqpClient {
         return new FakeAmqpClient(exchange, this.log);
@@ -110,5 +113,8 @@ export class FakeAmqpClient implements IAmqpClient {
         };
     }
 
-    close() { return Promise.resolve(); }
+    close() {
+        this.log.closed = this.closed + 1;
+        return Promise.resolve();
+    }
 }

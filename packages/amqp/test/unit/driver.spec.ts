@@ -354,6 +354,16 @@ describe('src/module', () => {
         expect(fourth).toMatch(/^\d+$/);
     });
 
+    it('should close the client', async () => {
+        const client = new FakeAmqpClient();
+        const driver = createDriver(client);
+        await driver.publish(shapes.work, message(shapes.work));
+
+        await driver.close();
+
+        expect(client.closed).toBe(1);
+    });
+
     it('should create a client lazily from a connection string', async () => {
         const driver = new AmqpMessageBusDriver({ connectionString: 'amqp://unused', defaultTopicExchange: 'FLAME' });
 
