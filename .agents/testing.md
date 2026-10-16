@@ -3,38 +3,47 @@
 ## Setup
 
 - **Runner**: [Vitest](https://vitest.dev)
-- **Test location**: `test/unit/**/*.{test,spec}.{js,ts}` — files outside this glob are **not** picked up
-- **Config**: `test/vitest.config.ts` (not in the project root — the npm scripts pass `--config` explicitly)
+- **Test location**: per package, `packages/<pkg>/test/unit/**/*.{test,spec}.{js,ts}` — files outside this glob are **not** picked up
+- **Config**: `packages/<pkg>/test/vitest.config.ts` (the npm scripts pass `--config` explicitly).
+  `@ergos/amqp`'s config aliases `ergos` to `../ergos/src`, so its tests need no prior build.
 - **Prerequisite**: `npm ci`. No database, container, or external service is required.
 
 ## Running Tests
 
 ```bash
-npm run test                                          # run all tests once
-npm run test:coverage                                 # run all tests with coverage
-npx vitest --config test/vitest.config.ts             # watch mode
-npx vitest --config test/vitest.config.ts --run test/unit/index.spec.ts   # single file
+npm run test                                  # every package (nx run-many), once
+npm run test:coverage                         # every package, with coverage
+npm run typecheck                             # tsc --noEmit over src + test, every package
+npm run test -w packages/ergos                # one package
+cd packages/ergos && npx vitest --config test/vitest.config.ts --run test/unit/hook.spec.ts   # single file
 ```
 
-`npm run test` already passes `--run`, so it never enters watch mode — safe for CI and for agents.
+The per-package `test` scripts pass `--run`, so they never enter watch mode — safe for CI and for agents.
 
 ## Test Layers
 
 ### Unit Tests
 
-`test/unit/` holds the only test layer, one spec per module (`component`, `scheduled`,
-`message-bus`, `memory-driver`, `direct-caller`, `dispatch-caller`, `worker-caller`, `amqp-driver`).
-Specs import from the **source** barrel (`'../../src'`), not from `dist/`.
+`test/unit/` holds the only test layer, one spec per module — ergos: `component`, `scheduled`,
+`hook`, `message-bus`, `memory-driver`, `direct-caller`, `dispatch-caller`, `worker-caller`;
+@ergos/amqp: `driver`. Specs import the package under test from its **source** barrel
+(`'../../src'`), not from `dist/`; amqp specs import `ergos` by name (aliased to source).
 
 - **Fakes, never `vi.fn()` / `vi.mock()`.** Shared fakes live in `test/unit/fakes/`
-  (`FakeLogger` recording calls, `TestComponent`). The memory driver is the bus in caller specs.
+  (`TestComponent`, `FakeMessageBus` implementing `IMessageBus`, `FakeAmqpClient`). The memory
+  driver is the bus in most caller specs. Hooks are asserted with plain objects whose hook
+  functions push into an array.
+- Every hook has a spec that it fires, and each hook site has one that a throwing hook leaves
+  the outcome unchanged (resolve vs. reject, ack vs. retry).
 - Concurrency is pinned with `Promise.withResolvers()` deferreds where possible.
   `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
-- `amqp-driver.spec.ts` runs against `FakeAmqpClient` (no broker) and compares every routing
+- `driver.spec.ts` (@ergos/amqp) runs against `FakeAmqpClient` (no broker) and compares every routing
   shape with `fixtures/hub-wire.ts`, captured from hub's former driver. The only allowed
   difference is the retry counter (body `metadata.attempt` → `x-attempt` header). Never
   regenerate the fixture from this driver — that would make the comparison vacuous.
-- `tsconfig.json` includes `src/` only; type-check specs with a tsconfig that also includes `test/`.
+- There is no broker-backed (RabbitMQ) integration test; amqp-extension's own suite covers the broker.
+- Each package's `tsconfig.json` includes `src/` and `test/` and is what `npm run typecheck` checks
+  (CI runs it); `tsconfig.build.json` (src only) is the `build:types` gate.
 
 ## Testing Philosophy
 
@@ -48,7 +57,7 @@ Prefer real implementations and small fake objects over `vi.fn()` / `vi.mock()`.
 npm run test:coverage
 ```
 
-Provider is **v8**, and coverage is measured over `src/**/*.{ts,tsx,js,jsx}` only. Thresholds are enforced — the command **fails** below any of them:
+Provider is **v8**, per package, and coverage is measured over `src/**/*.{ts,tsx,js,jsx}` only. Thresholds are enforced — the command **fails** below any of them:
 
 | Metric     | Threshold |
 |------------|-----------|
@@ -64,15 +73,16 @@ Reports land in `coverage/` (git-ignored). The README links a Codecov badge, but
 GitHub Actions (`.github/workflows/main.yml`) on pushes and PRs to `develop`, `master`, `next`, `beta`, `alpha`:
 
 ```
-install ──► build ──┬──► lint   (npm run lint)
-                    └──► tests  (npm run test)
+install ──► build ──┬──► lint      (npm run lint)
+                    ├──► typecheck (npm run typecheck)
+                    └──► tests     (npm run test)
 ```
 
-Node 24, `npm ci`, with `node_modules` cached by `package-lock.json` hash and `dist/` cached by commit SHA. Note CI runs `npm run test`, **not** `test:coverage` — coverage thresholds are not gating merges today.
+Node 24, `npm ci`, with `node_modules` cached by `package-lock.json` hash and every `dist/` cached by commit SHA. Note CI runs `npm run test`, **not** `test:coverage` — coverage thresholds are not gating merges today.
 
 ## Writing New Tests
 
-1. Place the file in `test/unit/` with a `.spec.ts` (or `.test.ts`) extension, mirroring the `src/` path it covers.
+1. Place the file in the package's `test/unit/` with a `.spec.ts` (or `.test.ts`) extension, mirroring the `src/` path it covers.
 2. Import the symbol under test from the barrel (`'../../src'`).
 3. Name the outer `describe` after the source file and phrase `it` titles as `should ...`.
 4. Run `npm run test` to verify, and `npm run test:coverage` if the change could move coverage below 80%.
