@@ -1,21 +1,21 @@
-# ergos-amqp
+# @synergos/amqp
 
-[![npm version](https://badge.fury.io/js/ergos-amqp.svg)](https://npmjs.com/package/ergos-amqp)
+[![npm version](https://badge.fury.io/js/@synergos%2Famqp.svg)](https://npmjs.com/package/@synergos/amqp)
 
-Maps the [ergos](https://npmjs.com/package/ergos) message bus onto RabbitMQ through
+Maps the [synergos](https://npmjs.com/package/synergos) message bus onto RabbitMQ through
 [amqp-extension](https://www.npmjs.com/package/amqp-extension).
 
 ## Installation
 
 ```bash
-npm install ergos ergos-amqp --save
+npm install synergos @synergos/amqp --save
 ```
 
 ## Usage
 
 ```ts
-import { MessageBus } from 'ergos';
-import { AmqpMessageBusDriver } from 'ergos-amqp';
+import { MessageBus } from 'synergos';
+import { AmqpMessageBusDriver } from '@synergos/amqp';
 
 const messageBus = new MessageBus({
     driver: new AmqpMessageBusDriver({
@@ -49,7 +49,7 @@ Options: `maxAttempts` (default 5), `retryDelay` (backoff base in ms, default 10
 | `onMalformed` | `{ routing, content, error? }` | a delivery is not JSON (`error` is the parse error) or not a message; it is acked |
 
 `attempt` is the attempt that failed (1-based). A hook that throws is ignored (see `invokeHook`
-in ergos): it never changes how a message is settled.
+in synergos): it never changes how a message is settled.
 
 ## Semantics
 

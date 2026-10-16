@@ -1,5 +1,5 @@
 {
-    "name": "ergos",
+    "name": "synergos",
     "version": "0.0.0",
     "type": "module",
     "description": "Components with a start/stop/status lifecycle, optional command handlers, scheduled jobs and the message bus that routes commands between them.",
@@ -10,8 +10,8 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/tada5hi/ergos.git",
-        "directory": "packages/ergos"
+        "url": "https://github.com/tada5hi/synergos.git",
+        "directory": "packages/synergos"
     },
     "main": "dist/index.mjs",
     "types": "dist/index.d.mts",

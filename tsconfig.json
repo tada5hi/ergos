@@ -2,8 +2,8 @@
     "extends": "./tsconfig.build.json",
     "compilerOptions": {
         "paths": {
-            "ergos": ["./packages/ergos/src/index.ts"],
-            "ergos-amqp": ["./packages/amqp/src/index.ts"]
+            "synergos": ["./packages/synergos/src/index.ts"],
+            "@synergos/amqp": ["./packages/amqp/src/index.ts"]
         }
     }
 }
