@@ -144,7 +144,7 @@ export interface IMessageBus {
 }
 
 /**
- * The contract every driver keeps, pinned by `synergos/conformance`.
+ * The contract every driver keeps, pinned by `busline/conformance`.
  */
 export interface IMessageBusDriver {
     /**

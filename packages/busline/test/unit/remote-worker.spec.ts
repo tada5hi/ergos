@@ -15,7 +15,7 @@ import type {
 } from '../../src';
 import type { TestEventMap } from './fakes/component';
 import { TestComponent } from './fakes/component';
-import { FakeMessageBus, drain  } from '@synergos/test';
+import { FakeMessageBus, drain  } from '@busline/test';
 
 const commands: MessageRouting = { type: 'work', key: 'commands' };
 const replies: MessageRouting = { type: 'work', key: 'replies' };

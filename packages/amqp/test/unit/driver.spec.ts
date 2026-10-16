@@ -9,9 +9,9 @@ import {
     MessageBus,
     RemoteWorker,
     buildMessage,
-} from 'synergos';
-import type { Message, MessageRouting } from 'synergos';
-import { defineDriverConformance } from '@synergos/test';
+} from 'busline';
+import type { Message, MessageRouting } from 'busline';
+import { defineDriverConformance } from '@busline/test';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { hubWireFixture } from './fixtures/hub-wire';
 

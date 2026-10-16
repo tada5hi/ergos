@@ -1,19 +1,19 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/logo-amqp.svg" alt="@synergos/amqp" width="128" height="128" />
+    <img src="https://raw.githubusercontent.com/tada5hi/busline/master/.github/assets/logo-amqp.svg" alt="@busline/amqp" width="128" height="128" />
 </p>
 
-<h1 align="center">@synergos/amqp</h1>
+<h1 align="center">@busline/amqp</h1>
 
 <p align="center">
-    <b>Run the synergos message bus over RabbitMQ.</b><br>
+    <b>Run the busline message bus over RabbitMQ.</b><br>
     Work queues with retries and backoff, topic exchanges for pub/sub, and typed hooks<br>
     for every message that is retried, dropped or malformed. Built on <a href="https://www.npmjs.com/package/amqp-extension">amqp-extension</a>.
 </p>
 
 <p align="center">
-    <a href="https://npmjs.com/package/@synergos/amqp"><img src="https://badge.fury.io/js/@synergos%2Famqp.svg" alt="npm version" /></a>
-    <a href="https://github.com/tada5hi/synergos/actions/workflows/main.yml"><img src="https://github.com/tada5hi/synergos/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
-    <a href="https://codecov.io/gh/tada5hi/synergos"><img src="https://codecov.io/gh/tada5hi/synergos/branch/master/graph/badge.svg?token=4KNSG8L13V" alt="codecov" /></a>
+    <a href="https://npmjs.com/package/@busline/amqp"><img src="https://badge.fury.io/js/@busline%2Famqp.svg" alt="npm version" /></a>
+    <a href="https://github.com/tada5hi/busline/actions/workflows/main.yml"><img src="https://github.com/tada5hi/busline/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
+    <a href="https://codecov.io/gh/tada5hi/busline"><img src="https://codecov.io/gh/tada5hi/busline/branch/master/graph/badge.svg?token=4KNSG8L13V" alt="codecov" /></a>
     <a href="https://conventionalcommits.org"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits" /></a>
 </p>
 
@@ -35,9 +35,9 @@
 
 ---
 
-## Why @synergos/amqp?
+## Why @busline/amqp?
 
-[synergos](https://npmjs.com/package/synergos) components never see a transport: they get
+[busline](https://npmjs.com/package/busline) components never see a transport: they get
 `(data, context)` and a `MessageBus` routes commands and replies between them. In tests,
 `MemoryMessageBusDriver` does the routing in-process. In production you want the messages to
 survive a restart, failed handlers to be retried, and several replicas to share the work. This
@@ -67,10 +67,10 @@ driver maps the bus onto RabbitMQ so that none of the component code changes:
 ## Installation
 
 ```bash
-npm install synergos @synergos/amqp --save
+npm install busline @busline/amqp --save
 ```
 
-`synergos` is a peer dependency. The package is ESM-only and requires Node.js `>=22`.
+`busline` is a peer dependency. The package is ESM-only and requires Node.js `>=22`.
 
 ## Usage
 
@@ -78,8 +78,8 @@ Pass the driver to a `MessageBus`. Everything built on that bus (`RemoteDispatch
 `consume()`) now goes through RabbitMQ:
 
 ```typescript
-import { MessageBus, RemoteWorker } from 'synergos';
-import { AmqpMessageBusDriver } from '@synergos/amqp';
+import { MessageBus, RemoteWorker } from 'busline';
+import { AmqpMessageBusDriver } from '@busline/amqp';
 
 const driver = new AmqpMessageBusDriver({
     connectionString: 'amqp://<user>:<password>@<host>',
@@ -135,12 +135,12 @@ forwards, so give its `publish` routing `persistent: true`.
 
 `publish()` resolves once the broker has confirmed the message, and rejects when it refuses
 it or the driver was closed. The driver passes the
-[driver conformance](https://github.com/tada5hi/synergos/tree/master/packages/test#driver-conformance) suite of `@synergos/test`.
+[driver conformance](https://github.com/tada5hi/busline/tree/master/packages/test#driver-conformance) suite of `@busline/test`.
 
 ## Retries
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/amqp-retry.svg" alt="A work message that throws is re-published after a backoff until maxAttempts, then dropped; malformed deliveries are acked" width="100%" />
+    <img src="https://raw.githubusercontent.com/tada5hi/busline/master/.github/assets/amqp-retry.svg" alt="A work message that throws is re-published after a backoff until maxAttempts, then dropped; malformed deliveries are acked" width="100%" />
 </p>
 
 When a `work` handler throws, the error first reaches `MessageBus`' `onError` hook. amqp-extension
@@ -179,7 +179,7 @@ instead of throwing once more. The value is set on consume only and is never pub
 | `onMalformed` | `{ routing, content, error? }` | A delivery is not JSON (`error` is the parse error) or not a bus message. It is acked |
 
 `attempt` is the attempt that failed, 1-based. A hook that throws is ignored (see `invokeHook` in
-synergos): it never changes how a message is settled.
+busline): it never changes how a message is settled.
 
 ## API
 

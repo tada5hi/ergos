@@ -2,9 +2,9 @@
     "extends": "./tsconfig.build.json",
     "compilerOptions": {
         "paths": {
-            "synergos": ["./packages/synergos/src/index.ts"],
-            "@synergos/test": ["./packages/test/src/index.ts"],
-            "@synergos/amqp": ["./packages/amqp/src/index.ts"]
+            "busline": ["./packages/busline/src/index.ts"],
+            "@busline/test": ["./packages/test/src/index.ts"],
+            "@busline/amqp": ["./packages/amqp/src/index.ts"]
         }
     }
 }

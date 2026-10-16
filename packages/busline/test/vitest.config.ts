@@ -3,10 +3,10 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
     resolve: {
-        // the sources, not dist: @synergos/test's own `synergos` import must be this package's source
+        // the sources, not dist: @busline/test's own `busline` import must be this package's source
         alias: [
-            { find: /^synergos$/, replacement: fileURLToPath(new URL('../src/index.ts', import.meta.url)) },
-            { find: /^@synergos\/test$/, replacement: fileURLToPath(new URL('../../test/src/index.ts', import.meta.url)) },
+            { find: /^busline$/, replacement: fileURLToPath(new URL('../src/index.ts', import.meta.url)) },
+            { find: /^@busline\/test$/, replacement: fileURLToPath(new URL('../../test/src/index.ts', import.meta.url)) },
         ],
     },
     test: {

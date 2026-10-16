@@ -12,14 +12,14 @@ import {
     invokeHook,
     isMessage,
     serializeMessage,
-} from 'synergos';
+} from 'busline';
 import type {
     IMessageBusConsumer,
     IMessageBusDriver,
     Message,
     MessageHandler,
     MessageRouting,
-} from 'synergos';
+} from 'busline';
 import type {
     AmqpMessageBusDriverHooks,
     AmqpMessageBusDriverOptions,

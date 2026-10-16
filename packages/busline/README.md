@@ -1,8 +1,8 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/logo.svg" alt="synergos" width="128" height="128" />
+    <img src="https://raw.githubusercontent.com/tada5hi/busline/master/.github/assets/logo.svg" alt="busline" width="128" height="128" />
 </p>
 
-<h1 align="center">synergos</h1>
+<h1 align="center">busline</h1>
 
 <p align="center">
     <b>Components with a lifecycle, scheduled jobs, and the message bus between them.</b><br>
@@ -11,9 +11,9 @@
 </p>
 
 <p align="center">
-    <a href="https://npmjs.com/package/synergos"><img src="https://badge.fury.io/js/synergos.svg" alt="npm version" /></a>
-    <a href="https://github.com/tada5hi/synergos/actions/workflows/main.yml"><img src="https://github.com/tada5hi/synergos/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
-    <a href="https://codecov.io/gh/tada5hi/synergos"><img src="https://codecov.io/gh/tada5hi/synergos/branch/master/graph/badge.svg?token=4KNSG8L13V" alt="codecov" /></a>
+    <a href="https://npmjs.com/package/busline"><img src="https://badge.fury.io/js/busline.svg" alt="npm version" /></a>
+    <a href="https://github.com/tada5hi/busline/actions/workflows/main.yml"><img src="https://github.com/tada5hi/busline/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
+    <a href="https://codecov.io/gh/tada5hi/busline"><img src="https://codecov.io/gh/tada5hi/busline/branch/master/graph/badge.svg?token=4KNSG8L13V" alt="codecov" /></a>
     <a href="https://conventionalcommits.org"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits" /></a>
 </p>
 
@@ -35,18 +35,18 @@
 
 ---
 
-## Why synergos?
+## Why busline?
 
 Queue workers, cron jobs and in-process services tend to grow separately: each has its own
 startup and shutdown code, its own health flag and its own logger, and the handler logic ends up
-written against the transport it first ran on. synergos separates the three concerns:
+written against the transport it first ran on. busline separates the three concerns:
 
 - **What a component does** is a set of handlers, `mount('build', (data, context) => …)`. A
   handler never sees a queue, a channel or an ack.
 - **How it is reached** is a dispatcher. `LocalDispatcher` calls it in-process, `RemoteDispatcher`
   publishes a command, and a `RemoteWorker` consumes commands into it and publishes its replies.
 - **Where messages travel** is a driver behind `MessageBus`. `MemoryMessageBusDriver` ships here,
-  [`@synergos/amqp`](https://npmjs.com/package/@synergos/amqp) adds RabbitMQ.
+  [`@busline/amqp`](https://npmjs.com/package/@busline/amqp) adds RabbitMQ.
 
 Everything that runs in the background, components, workers and scheduled jobs, implements the
 same `IComponent` contract (`start`, `stop`, `status`), so an application can start, stop and
@@ -77,7 +77,7 @@ health-check all of them in one loop.
 ## Installation
 
 ```bash
-npm install synergos --save
+npm install busline --save
 ```
 
 The package is ESM-only and requires Node.js `>=22`. Its only runtime dependency is
@@ -91,8 +91,8 @@ A `Component` maps command keys to handlers. The optional event map types each k
 metadata:
 
 ```typescript
-import { Component } from 'synergos';
-import type { ComponentMetadata } from 'synergos';
+import { Component } from 'busline';
+import type { ComponentMetadata } from 'busline';
 
 type BuilderEvents = {
     build: [{ id: string }, ComponentMetadata],
@@ -119,7 +119,7 @@ class Builder extends Component<BuilderEvents> {
 `context.handle(key, data)` emits a child event. It is resolved like any other key, in this order:
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/component.svg" alt="handle(key) runs the mounted handler, else the '*' fallback, else the caller's options.handle (a reply), else resolves without error" width="100%" />
+    <img src="https://raw.githubusercontent.com/tada5hi/busline/master/.github/assets/component.svg" alt="handle(key) runs the mounted handler, else the '*' fallback, else the caller's options.handle (a reply), else resolves without error" width="100%" />
 </p>
 
 So an event the component does not handle itself, `buildFinished` above, falls through to the
@@ -166,7 +166,7 @@ a call is in flight, `lastSuccessAt` when the last one completed without throwin
 `defineScheduledComponent` turns a function into a background job:
 
 ```typescript
-import { defineScheduledComponent } from 'synergos';
+import { defineScheduledComponent } from 'busline';
 
 const cleaner = defineScheduledComponent({
     schedule: '*/5 * * * *', // node-cron: every five minutes
@@ -199,7 +199,7 @@ await cleaner.settled(); // the pass in flight, if any, has finished
 driver. Dispatchers and workers depend on the `IMessageBus` contract, not the class.
 
 ```typescript
-import { MemoryMessageBusDriver, MessageBus, buildMessage } from 'synergos';
+import { MemoryMessageBusDriver, MessageBus, buildMessage } from 'busline';
 
 const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
 
@@ -256,8 +256,8 @@ if (attempt < maxAttempts && isTransient(error)) throw error; // let the driver 
 
 | Driver | Package | Use it for |
 |---|---|---|
-| `MemoryMessageBusDriver` | `synergos` | Tests and single-process apps. No retries: a failed handler's message is dropped (`delivery` is `1/1`) |
-| `AmqpMessageBusDriver` | [`@synergos/amqp`](https://npmjs.com/package/@synergos/amqp) | RabbitMQ: persistent work queues, retries with backoff, topic exchanges for pubSub |
+| `MemoryMessageBusDriver` | `busline` | Tests and single-process apps. No retries: a failed handler's message is dropped (`delivery` is `1/1`) |
+| `AmqpMessageBusDriver` | [`@busline/amqp`](https://npmjs.com/package/@busline/amqp) | RabbitMQ: persistent work queues, retries with backoff, topic exchanges for pubSub |
 
 A driver implements `IMessageBusDriver`: `publish(routing, message)`, `consume(routing, handler)`
 and `close()`. Every driver keeps the same contract:
@@ -280,14 +280,14 @@ parses each delivery anew, the memory driver hands every consumer the published 
 
 ### Driver conformance
 
-[`@synergos/test`](https://github.com/tada5hi/synergos/tree/master/packages/test#driver-conformance)
+[`@busline/test`](https://github.com/tada5hi/busline/tree/master/packages/test#driver-conformance)
 pins that contract as test cases, for vitest, jest or `node:test`. `MemoryMessageBusDriver` and
 `AmqpMessageBusDriver` both pass it; run it against your own driver too.
 
 ## Dispatchers and workers
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/architecture.svg" alt="A RemoteDispatcher publishes a build command through the message bus to a RemoteWorker, whose component replies with buildFinished" width="100%" />
+    <img src="https://raw.githubusercontent.com/tada5hi/busline/master/.github/assets/architecture.svg" alt="A RemoteDispatcher publishes a build command through the message bus to a RemoteWorker, whose component replies with buildFinished" width="100%" />
 </p>
 
 Both dispatchers implement `IDispatcher`: `dispatch(key, data, metadata?)` resolves
@@ -312,7 +312,7 @@ const events = { type: 'work', key: 'builder-events' } as const;
 A `LocalDispatcher` runs the component right away and returns what it forwarded:
 
 ```typescript
-import { LocalDispatcher } from 'synergos';
+import { LocalDispatcher } from 'busline';
 
 const { replies } = await new LocalDispatcher(new Builder()).dispatch('build', { id: '1' });
 replies; // [{ key: 'buildFinished', data: { id: '1' }, metadata: { correlationId: '…' } }]
@@ -325,7 +325,7 @@ On the worker side, a `RemoteWorker` consumes `commands` and publishes the forwa
 component, and a `RemoteDispatcher` sends the commands:
 
 ```typescript
-import { Component, RemoteDispatcher, RemoteWorker } from 'synergos';
+import { Component, RemoteDispatcher, RemoteWorker } from 'busline';
 
 // worker side
 await new RemoteWorker(new Builder(), { messageBus, consume: commands, publish: events }).start();
@@ -351,7 +351,7 @@ component runs. Give a `LocalDispatcher` the same inbox as `reply`, and the repl
 way in both modes:
 
 ```typescript
-import type { IDispatcher } from 'synergos';
+import type { IDispatcher } from 'busline';
 
 const dispatcher: IDispatcher<BuilderEvents> = messageBus
     ? new RemoteDispatcher({ messageBus, routing: commands })

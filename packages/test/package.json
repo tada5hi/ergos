@@ -1,8 +1,8 @@
 {
-    "name": "@synergos/test",
+    "name": "@busline/test",
     "version": "0.0.0",
     "type": "module",
-    "description": "Test-framework-agnostic conformance suite for synergos message bus drivers (vitest, jest, node:test).",
+    "description": "Test-framework-agnostic conformance suite for busline message bus drivers (vitest, jest, node:test).",
     "author": {
         "name": "Peter Placzek",
         "email": "contact@tada5hi.net",
@@ -10,7 +10,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/tada5hi/synergos.git",
+        "url": "https://github.com/tada5hi/busline.git",
         "directory": "packages/test"
     },
     "main": "dist/index.mjs",
@@ -40,16 +40,16 @@
         "message-bus",
         "conformance",
         "test",
-        "synergos"
+        "busline"
     ],
     "publishConfig": {
         "access": "public"
     },
     "license": "MIT",
     "devDependencies": {
-        "synergos": "^0.1.0"
+        "busline": "^0.1.0"
     },
     "peerDependencies": {
-        "synergos": "^0.1.0"
+        "busline": "^0.1.0"
     }
 }

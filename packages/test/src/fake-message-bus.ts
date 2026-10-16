@@ -5,7 +5,7 @@ import type {
     MessageHandler,
     MessageHandlers,
     MessageRouting,
-} from 'synergos';
+} from 'busline';
 
 /**
  * Records publishes. Consumers are recorded, never fed.

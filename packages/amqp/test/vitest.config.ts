@@ -5,8 +5,8 @@ export default defineConfig({
     resolve: {
         // the core's source, not its dist: no build needed before testing
         alias: [
-            { find: /^synergos$/, replacement: fileURLToPath(new URL('../../synergos/src/index.ts', import.meta.url)) },
-            { find: /^@synergos\/test$/, replacement: fileURLToPath(new URL('../../test/src/index.ts', import.meta.url)) },
+            { find: /^busline$/, replacement: fileURLToPath(new URL('../../busline/src/index.ts', import.meta.url)) },
+            { find: /^@busline\/test$/, replacement: fileURLToPath(new URL('../../test/src/index.ts', import.meta.url)) },
         ],
     },
     test: {
