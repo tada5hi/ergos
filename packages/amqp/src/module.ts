@@ -9,15 +9,15 @@ import {
     MessageBusRoutingType,
     isMessageBusPayload,
     serializeMessageBusPayload,
-} from '../message-bus';
+} from 'ergos';
 import type {
+    ILogger,
     IMessageBusConsumer,
     IMessageBusDriver,
     MessageBusHandler,
     MessageBusPayload,
     MessageBusRouting,
-} from '../message-bus';
-import type { ILogger } from '../types';
+} from 'ergos';
 import type { AmqpMessageBusDriverOptions, IAmqpClient } from './types';
 
 /**

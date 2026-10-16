@@ -1,0 +1,52 @@
+{
+    "name": "ergos",
+    "version": "0.0.0",
+    "type": "module",
+    "description": "Components with a start/stop/status lifecycle, optional command handlers, scheduled jobs and the message bus that routes commands between them.",
+    "author": {
+        "name": "Peter Placzek",
+        "email": "contact@tada5hi.net",
+        "url": "https://github.com/tada5hi"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tada5hi/ergos.git",
+        "directory": "packages/ergos"
+    },
+    "main": "dist/index.mjs",
+    "types": "dist/index.d.mts",
+    "exports": {
+        "./package.json": "./package.json",
+        ".": {
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "scripts": {
+        "build:types": "tsc --noEmit -p tsconfig.build.json",
+        "build:js": "tsdown",
+        "build": "npm run build:types && npm run build:js",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest --config test/vitest.config.ts --run",
+        "test:coverage": "vitest --config test/vitest.config.ts --run --coverage"
+    },
+    "keywords": [
+        "component",
+        "message-bus",
+        "worker",
+        "cron"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "node-cron": "^4.6.0"
+    }
+}

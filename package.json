@@ -1,5 +1,6 @@
 {
-    "name": "ergos",
+    "name": "@ergos/root",
+    "private": true,
     "version": "0.0.0",
     "type": "module",
     "description": "Components with a start/stop/status lifecycle, optional command handlers, scheduled jobs and the message bus that routes commands between them.",
@@ -12,42 +13,20 @@
         "type": "git",
         "url": "https://github.com/tada5hi/ergos.git"
     },
-    "main": "dist/index.mjs",
-    "types": "dist/index.d.mts",
-    "exports": {
-        "./package.json": "./package.json",
-        ".": {
-            "types": "./dist/index.d.mts",
-            "import": "./dist/index.mjs"
-        },
-        "./amqp": {
-            "types": "./dist/amqp/index.d.mts",
-            "import": "./dist/amqp/index.mjs"
-        }
-    },
-    "files": [
-        "dist"
+    "workspaces": [
+        "packages/*"
     ],
     "engines": {
         "node": ">=22.0.0"
     },
     "scripts": {
-        "build": "tsdown",
-        "test": "vitest --config test/vitest.config.ts --run",
-        "test:coverage": "vitest --config test/vitest.config.ts --run --coverage",
+        "build": "npx nx run-many -t build",
+        "test": "npx nx run-many -t test",
+        "test:coverage": "npx nx run-many -t test:coverage",
+        "typecheck": "npx nx run-many -t typecheck",
         "lint": "eslint",
         "lint:fix": "npm run lint -- --fix",
         "prepare": "husky"
-    },
-    "keywords": [
-        "component",
-        "message-bus",
-        "worker",
-        "cron",
-        "amqp"
-    ],
-    "publishConfig": {
-        "access": "public"
     },
     "license": "MIT",
     "devDependencies": {
@@ -55,23 +34,12 @@
         "@tada5hi/eslint-config": "^2.3.1",
         "@tada5hi/tsconfig": "^0.7.2",
         "@vitest/coverage-v8": "^4.1.10",
-        "amqp-extension": "^5.1.0",
         "eslint": "^10.8.0",
         "husky": "^9.1.7",
+        "nx": "^23.1.1",
         "tsdown": "^0.22.14",
         "typescript": "^6.0.3",
         "typescript-eslint": "^8.65.0",
         "vitest": "^4.1.10"
-    },
-    "dependencies": {
-        "node-cron": "^4.6.0"
-    },
-    "peerDependencies": {
-        "amqp-extension": "^5.1.0"
-    },
-    "peerDependenciesMeta": {
-        "amqp-extension": {
-            "optional": true
-        }
     }
 }
