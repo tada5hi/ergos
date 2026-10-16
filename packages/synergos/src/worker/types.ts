@@ -6,7 +6,7 @@ import type { IMessageBus, Message, MessageRouting } from '../message-bus';
  */
 export type RemoteWorkerHooks = {
     /**
-     * A forwarded event was dropped: no reply routing is set. Untyped: an unknown
+     * A forwarded event was dropped: no `publish` routing is set. Untyped: an unknown
      * command from the wire is forwarded too.
      */
     onUnrouted?(event: ForwardedEvent): void,
@@ -22,6 +22,6 @@ export type RemoteWorkerOptions = {
     /**
      * Where forwarded events are published. Unset: they are dropped and reported.
      */
-    reply?: MessageRouting,
+    publish?: MessageRouting,
     hooks?: RemoteWorkerHooks,
 };

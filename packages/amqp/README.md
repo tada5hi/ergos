@@ -96,7 +96,7 @@ const messageBus = new MessageBus({ driver });
 const worker = new RemoteWorker(new Builder(), {
     messageBus,
     consume: { type: 'work', key: 'builder' },
-    reply: { type: 'work', key: 'builder-events' },
+    publish: { type: 'work', key: 'builder-events' },
 });
 await worker.start();
 

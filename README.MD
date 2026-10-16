@@ -52,20 +52,19 @@ synergos gives all of that one shape:
 | **Shutdown** | Exit and hope the handler in flight finished | `RemoteWorker.stop()` waits for the handler in flight |
 | **Observability** | A logger dependency in every class | Typed `hooks` (`onError`, `onRetry`, …). A hook that throws is ignored and can never turn an ack into a retry |
 
-The same component, reached three ways:
+Write a component once, then decide where it runs:
 
 ```typescript
 const builder = new Component();
 builder.mount('build', async (data, context) => {
-    await context.handle('buildFinished', data);
+    await context.handle('buildFinished', data); // the reply
 });
 
-// in-process, e.g. in a test or a CLI
-const local = await new LocalDispatcher(builder).dispatch('build', { id: '1' });
-local.replies; // [{ key: 'buildFinished', data: { id: '1' }, metadata: { correlationId } }]
+// in this process, e.g. in a test or a CLI
+const { replies } = await new LocalDispatcher(builder).dispatch('build', { id: '1' });
 
-// through a bus: memory in tests, RabbitMQ in production
-await new RemoteWorker(builder, { messageBus, consume: commands, reply: replies }).start();
+// on a worker, reached through a message bus
+await new RemoteWorker(builder, { messageBus, consume: commands, publish: events }).start();
 await new RemoteDispatcher({ messageBus, routing: commands }).dispatch('build', { id: '1' });
 ```
 
@@ -89,14 +88,11 @@ Both packages are ESM-only and require Node.js `>=22`.
 
 ## Quick Start
 
+**1. Describe the events and write the component.** A handler gets the data and a `context`;
+`context.handle()` emits an event the component does not handle itself, here the reply.
+
 ```typescript
-import {
-    Component,
-    MemoryMessageBusDriver,
-    MessageBus,
-    RemoteDispatcher,
-    RemoteWorker,
-} from 'synergos';
+import { Component } from 'synergos';
 import type { ComponentMetadata } from 'synergos';
 
 type BuilderEvents = {
@@ -104,39 +100,57 @@ type BuilderEvents = {
     buildFinished: [{ id: string }, ComponentMetadata],
 };
 
-const messageBus = new MessageBus({
-    driver: new MemoryMessageBusDriver(),
-    hooks: { onError: (error, message) => console.error(message.type, error) },
-});
-
-// worker side: consume commands, publish the replies
 const builder = new Component<BuilderEvents>();
 builder.mount('build', async (data, context) => {
     // ... do the work ...
     await context.handle('buildFinished', data);
 });
+```
 
-const worker = new RemoteWorker(builder, {
-    messageBus,
-    consume: { type: 'work', key: 'builder' },
-    reply: { type: 'work', key: 'builder-events' },
-});
+**2. Call it in-process.** A `LocalDispatcher` runs the component and returns its replies:
+
+```typescript
+import { LocalDispatcher } from 'synergos';
+
+const { replies } = await new LocalDispatcher(builder).dispatch('build', { id: '1' });
+// [{ key: 'buildFinished', data: { id: '1' }, metadata: { correlationId: '…' } }]
+```
+
+**3. Run it behind a message bus.** A `RemoteWorker` consumes commands from one routing and
+publishes the replies to another; a `RemoteDispatcher` sends the commands. The in-memory driver
+needs no broker:
+
+```typescript
+import {
+    MemoryMessageBusDriver,
+    MessageBus,
+    RemoteDispatcher,
+    RemoteWorker,
+} from 'synergos';
+
+const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
+const commands = { type: 'work', key: 'builder' } as const;
+const events = { type: 'work', key: 'builder-events' } as const;
+
+// the worker: commands in, replies out
+const worker = new RemoteWorker(builder, { messageBus, consume: commands, publish: events });
 await worker.start();
 
-// dispatching side: an inbox component for the replies, then send a command
+// the replies land in an inbox component
 const inbox = new Component<BuilderEvents>();
-inbox.mount('buildFinished', (data, context) => console.log('finished', data.id, context.metadata.correlationId));
-await new RemoteWorker(inbox, { messageBus, consume: { type: 'work', key: 'builder-events' } }).start();
+inbox.mount('buildFinished', (data, context) => {
+    console.log('finished', data.id, context.metadata.correlationId);
+});
+await new RemoteWorker(inbox, { messageBus, consume: events }).start();
 
-const { correlationId, delivered } = await new RemoteDispatcher<BuilderEvents>({
-    messageBus,
-    routing: { type: 'work', key: 'builder' },
-}).dispatch('build', { id: '1' });
+// send a command
+const dispatcher = new RemoteDispatcher<BuilderEvents>({ messageBus, routing: commands });
+const { correlationId } = await dispatcher.dispatch('build', { id: '1' });
 
 await worker.stop(); // waits for the handler in flight
 ```
 
-Going to production means swapping one line, the driver:
+**4. Go to production** by swapping the driver; nothing else changes:
 
 ```typescript
 import { AmqpMessageBusDriver } from '@synergos/amqp';

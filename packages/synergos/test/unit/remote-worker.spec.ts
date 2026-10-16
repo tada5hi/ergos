@@ -56,7 +56,7 @@ describe('src/worker/module', () => {
         await new RemoteWorker(component, {
             messageBus,
             consume: commands,
-            reply: replies,
+            publish: replies,
         }).start();
         await new RemoteWorker(inbox, { messageBus, consume: replies }).start();
 
@@ -78,7 +78,7 @@ describe('src/worker/module', () => {
         await new RemoteWorker(component, {
             messageBus,
             consume: commands,
-            reply: replies,
+            publish: replies,
         }).start();
 
         const before = Date.now();
@@ -113,7 +113,7 @@ describe('src/worker/module', () => {
         await new RemoteWorker(component, {
             messageBus,
             consume: commands,
-            reply: replies,
+            publish: replies,
         }).start();
 
         await dispatcher.dispatch('execute', { id: 'a' }, { correlationId: 'c' });
@@ -121,21 +121,21 @@ describe('src/worker/module', () => {
         expect(Object.keys(received[0]?.metadata ?? {})).toEqual(['timestamp', 'correlationId', 'routing', 'step']);
     });
 
-    it('should forward an unknown command to reply', async () => {
+    it('should forward an unknown command to publish', async () => {
         const { messageBus, component } = setup();
         const received = await consumeReplies(messageBus);
 
         await new RemoteWorker(component, {
             messageBus,
             consume: commands,
-            reply: replies,
+            publish: replies,
         }).start();
         await new RemoteDispatcher({ messageBus, routing: commands }).dispatch('nope', {});
 
         expect(received.map((message) => message.type)).toEqual(['nope']);
     });
 
-    it('should report a forwarded event with no reply routing to onUnrouted', async () => {
+    it('should report a forwarded event with no publish routing to onUnrouted', async () => {
         const {
             messageBus, 
             component, 
@@ -185,7 +185,7 @@ describe('src/worker/module', () => {
         await new RemoteWorker(component, {
             messageBus,
             consume: commands,
-            reply: replies,
+            publish: replies,
             hooks: { onUndelivered: (message) => { undelivered.push(message); } },
         }).start();
 
@@ -203,7 +203,7 @@ describe('src/worker/module', () => {
         await new RemoteWorker(component, {
             messageBus,
             consume: commands,
-            reply: replies,
+            publish: replies,
             hooks: { onUndelivered: () => { throw new Error('hook'); } },
         }).start();
 

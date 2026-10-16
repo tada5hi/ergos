@@ -249,57 +249,81 @@ when the metadata has none, and every forwarded event carries it.
 | Class | Where the component runs | Forwarded events |
 |---|---|---|
 | `LocalDispatcher` | In this process | Returned as `replies`, and handed to the `reply` component if one is set |
-| `RemoteDispatcher` | Wherever a `RemoteWorker` consumes its `routing` | Published by that worker to its `reply` routing |
-| `RemoteWorker` | Wraps the component and consumes the `consume` routing into it | Published to `reply`; without one, dropped and reported to `onUnrouted` |
+| `RemoteDispatcher` | Wherever a `RemoteWorker` consumes its `routing` | Published by that worker to its `publish` routing |
+| `RemoteWorker` | Wraps the component and consumes the `consume` routing into it | Published to `publish`; without one, dropped and reported to `onUnrouted` |
 
-Since both dispatchers share one contract, one line at the composition root decides where a
-component runs:
+The examples use the `Builder` component from [Components](#components) and these two routings:
 
 ```typescript
-import {
-    Component,
-    LocalDispatcher,
-    RemoteDispatcher,
-    RemoteWorker,
-} from 'synergos';
-import type { IDispatcher } from 'synergos';
-
 const commands = { type: 'work', key: 'builder' } as const;
-const replies = { type: 'work', key: 'builder-events' } as const;
-
-// the replies land in an inbox component, matched by correlationId
-const inbox = new Component<BuilderEvents>();
-inbox.mount('buildFinished', (data, context) => done(context.metadata.correlationId, data));
-
-// the event map types the keys: pass it, or annotate the target as here
-const dispatcher: IDispatcher<BuilderEvents> = messageBus
-    ? new RemoteDispatcher({ messageBus, routing: commands })
-    : new LocalDispatcher(new Builder(), { reply: inbox });
-
-await dispatcher.dispatch('build', { id: '1' });
-
-// worker node
-await new RemoteWorker(new Builder(), { messageBus, consume: commands, reply: replies }).start();
-await new RemoteWorker(inbox, { messageBus, consume: replies }).start();
+const events = { type: 'work', key: 'builder-events' } as const;
 ```
 
-In tests or on a single node, a `LocalDispatcher` returns the forwarded events directly:
+### In-process
+
+A `LocalDispatcher` runs the component right away and returns what it forwarded:
 
 ```typescript
+import { LocalDispatcher } from 'synergos';
+
 const { replies } = await new LocalDispatcher(new Builder()).dispatch('build', { id: '1' });
 replies; // [{ key: 'buildFinished', data: { id: '1' }, metadata: { correlationId: '…' } }]
 ```
 
-`delivered` tells whether the bus accepted the command. It is always `true` for a
-`LocalDispatcher`; a `RemoteDispatcher` resolves `false` when no consumer matched (memory driver),
-so an application can fall back to running the command in-process:
+### Over a message bus
+
+On the worker side, a `RemoteWorker` consumes `commands` and publishes the forwarded events to
+`events`. On the dispatching side, a second `RemoteWorker` consumes `events` into an inbox
+component, and a `RemoteDispatcher` sends the commands:
 
 ```typescript
-const result = await remote.dispatch('build', data);
+import { Component, RemoteDispatcher, RemoteWorker } from 'synergos';
+
+// worker side
+await new RemoteWorker(new Builder(), { messageBus, consume: commands, publish: events }).start();
+
+// dispatching side
+const inbox = new Component<BuilderEvents>();
+inbox.mount('buildFinished', (data, context) => {
+    console.log('finished', data.id, context.metadata.correlationId);
+});
+await new RemoteWorker(inbox, { messageBus, consume: events }).start();
+
+const dispatcher = new RemoteDispatcher<BuilderEvents>({ messageBus, routing: commands });
+await dispatcher.dispatch('build', { id: '1' });
+```
+
+Pass the event map (`RemoteDispatcher<BuilderEvents>`), or annotate the variable as
+`IDispatcher<BuilderEvents>`: without it, any key and any data compile.
+
+### Choosing at startup
+
+Both dispatchers implement `IDispatcher`, so the rest of the application does not care where the
+component runs. Give a `LocalDispatcher` the same inbox as `reply`, and the replies arrive the same
+way in both modes:
+
+```typescript
+import type { IDispatcher } from 'synergos';
+
+const dispatcher: IDispatcher<BuilderEvents> = messageBus
+    ? new RemoteDispatcher({ messageBus, routing: commands })
+    : new LocalDispatcher(new Builder(), { reply: inbox });
+```
+
+### Falling back when the bus did not deliver
+
+`delivered` tells whether the bus accepted the command. It is always `true` for a
+`LocalDispatcher`; a `RemoteDispatcher` resolves `false` when no consumer matched (memory driver),
+so an application can run the command in-process instead:
+
+```typescript
+const result = await remote.dispatch('build', { id: '1' });
 if (!result.delivered) {
-    await local.dispatch('build', data);
+    await local.dispatch('build', { id: '1' });
 }
 ```
+
+### Lifecycle
 
 A `RemoteWorker` is itself an `IComponent`: start and stop it with the rest of your application.
 `start()` starts the component, then consumes; `stop()` cancels the consumer, waits for the handler
@@ -343,7 +367,7 @@ to your logger, metrics or tracing:
 | | `onUnhandled(message, routing)` | No handler (and no `'*'`) accepted it. It is acked |
 | | `onError(error, message, routing)` | A handler threw. The error is rethrown to the driver afterwards |
 | `RemoteDispatcher` | `onUndelivered(message)` | `publish()` resolved `false`: no consumer matched (memory driver). `dispatch()` resolves `delivered: false` |
-| `RemoteWorker` | `onUnrouted(event)` | A forwarded event was dropped because no `reply` routing is set |
+| `RemoteWorker` | `onUnrouted(event)` | A forwarded event was dropped because no `publish` routing is set |
 | | `onUndelivered(message)` | Publishing a forwarded event resolved `false`. The command still settles |
 | `defineScheduledComponent` | `onError(error)` | A pass failed |
 

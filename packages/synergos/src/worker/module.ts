@@ -11,7 +11,7 @@ import type { Message } from '../message-bus';
 import type { RemoteWorkerOptions } from './types';
 
 /**
- * Consumes a routing into a component and publishes its forwarded events to `reply`.
+ * Consumes a routing into a component and publishes its forwarded events to `publish`.
  */
 export class RemoteWorker<
     EventMap extends ComponentEventMap = ComponentEventMap,
@@ -62,7 +62,7 @@ export class RemoteWorker<
     protected async consume(message: Message): Promise<void> {
         const {
             messageBus, 
-            reply, 
+            publish, 
             hooks, 
         } = this.options;
         const event = fromMessage<EventMap>(message);
@@ -74,13 +74,13 @@ export class RemoteWorker<
                     data,
                     metadata: ctx.metadata,
                 };
-                if (!reply) {
+                if (!publish) {
                     invokeHook(hooks, 'onUnrouted', forwarded);
                     return;
                 }
 
                 // the command still settles: a retry would re-run its side effects for a reply-only problem
-                const forwardedMessage = toForwardedMessage(forwarded, reply);
+                const forwardedMessage = toForwardedMessage(forwarded, publish);
                 if (!await messageBus.publish(forwardedMessage)) {
                     invokeHook(hooks, 'onUndelivered', forwardedMessage);
                 }
