@@ -194,18 +194,52 @@ describe('src/module', () => {
     it('should hand a parsed payload to the handler', async () => {
         const client = new FakeAmqpClient();
         const seen: Message[] = [];
+        await createDriver(client).consume(shapes.pubSub, (received) => { seen.push(received); });
+
+        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.pubSub))), properties: {} });
+
+        expect(seen).toEqual([message(shapes.pubSub)]);
+    });
+
+    it('should hand a WORK handler its delivery attempt from the x-attempt header', async () => {
+        const client = new FakeAmqpClient();
+        const seen: Message[] = [];
         await createDriver(client).consume(shapes.work, (received) => { seen.push(received); });
 
-        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.work))) });
+        const content = Buffer.from(JSON.stringify(message(shapes.work)));
+        await client.consumes[0]?.handler({ content, properties: { headers: { 'x-attempt': 3 } } });
+        await client.consumes[0]?.handler({ content, properties: {} });
 
-        expect(seen).toEqual([message(shapes.work)]);
+        expect(seen.map((received) => received.metadata.attempt)).toEqual([3, 1]);
+    });
+
+    it('should override an attempt counter in the body of a WORK message (an older hub producer)', async () => {
+        const client = new FakeAmqpClient();
+        const seen: Message[] = [];
+        await createDriver(client).consume(shapes.work, (received) => { seen.push(received); });
+
+        const legacy = message(shapes.work);
+        legacy.metadata.attempt = 4;
+        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(legacy)), properties: {} });
+
+        expect(seen[0]?.metadata.attempt).toBe(1);
+    });
+
+    it('should not set an attempt on a PUB_SUB message', async () => {
+        const client = new FakeAmqpClient();
+        const seen: Message[] = [];
+        await createDriver(client).consume(shapes.pubSub, (received) => { seen.push(received); });
+
+        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.pubSub))), properties: { headers: { 'x-attempt': 3 } } });
+
+        expect(seen[0]?.metadata.attempt).toBeUndefined();
     });
 
     it('should let a handler error reach amqp-extension (which retries or nacks)', async () => {
         const client = new FakeAmqpClient();
         await createDriver(client).consume(shapes.work, () => { throw new Error('boom'); });
 
-        await expect(client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.work))) }))
+        await expect(client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.work))), properties: {} }))
             .rejects.toThrow('boom');
     });
 
@@ -218,8 +252,8 @@ describe('src/module', () => {
 
         const unparsable = Buffer.from('{nope');
         const shapeless = Buffer.from(JSON.stringify({ id: 1 }));
-        await client.consumes[0]?.handler({ content: unparsable });
-        await client.consumes[0]?.handler({ content: shapeless });
+        await client.consumes[0]?.handler({ content: unparsable, properties: {} });
+        await client.consumes[0]?.handler({ content: shapeless, properties: {} });
 
         expect(seen).toEqual([]);
         expect(malformed).toHaveLength(2);
@@ -233,7 +267,7 @@ describe('src/module', () => {
         await createDriver(client, { onMalformed: () => { throw new Error('hook'); } })
             .consume(shapes.work, () => {});
 
-        await expect(client.consumes[0]?.handler({ content: Buffer.from('{nope') })).resolves.toBeUndefined();
+        await expect(client.consumes[0]?.handler({ content: Buffer.from('{nope'), properties: {} })).resolves.toBeUndefined();
     });
 
     it('should serialize errors in the body', async () => {

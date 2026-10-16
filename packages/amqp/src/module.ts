@@ -128,6 +128,11 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
                     return;
                 }
 
+                if (isWork) {
+                    // amqp-extension counts attempts in the x-attempt header, not in the body
+                    message.metadata.attempt = resolveAttempt(input.properties);
+                }
+
                 await handler(message);
             },
         });
