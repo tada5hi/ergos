@@ -65,6 +65,9 @@ health-check all of them in one loop.
   - [Drivers](#drivers)
 - [Dispatchers and workers](#dispatchers-and-workers)
   - [Forwarded events](#forwarded-events)
+  - [Publishing selected replies](#publishing-selected-replies)
+  - [Testing a handler](#testing-a-handler)
+- [Migrating from 0.1](#migrating-from-01)
 - [Hooks](#hooks)
 - [API](#api)
 - [Notes](#notes)
@@ -355,6 +358,82 @@ A forwarded event whose publish resolves `false` (no consumer, memory driver) is
 `onUndelivered`, and the command still settles (acked): a retry would re-run its side effects for a
 reply-only problem. A publish that *rejects* fails the command like a throwing handler: over AMQP the
 command is retried, and with the memory driver an inbox handler's error rejects `dispatch()`.
+
+### Publishing selected replies
+
+To run a component in-process but still announce some of its replies on the bus, dispatch locally
+and publish the chosen `replies` through a `RemoteDispatcher` on the events routing. Passing each
+reply's metadata keeps its `correlationId`:
+
+```typescript
+const local = new LocalDispatcher(new Builder());
+const announce = new RemoteDispatcher<BuilderEvents>({ messageBus, routing: events });
+
+const { replies } = await local.dispatch('build', { id: '1' });
+for (const reply of replies) {
+    if (reply.key === 'buildFinished') {
+        await announce.dispatch(reply.key, reply.data, reply.metadata);
+    }
+}
+```
+
+Unlike a `RemoteWorker`, a `RemoteDispatcher` keeps a `persistent` flag present in that metadata.
+
+### Testing a handler
+
+No fake context is needed: mount the handler on a `Component`, dispatch through a
+`LocalDispatcher` with the metadata the case needs, and assert on the replies:
+
+```typescript
+const component = new Component<BuilderEvents>();
+component.mount('build', buildHandler);
+
+// e.g. the last delivery attempt of a retrying driver
+const { replies } = await new LocalDispatcher(component).dispatch('build', { id: '1' }, { attempt: 5 });
+
+const failed = replies.find((reply) => reply.key === 'buildFailed');
+```
+
+`replies.find((reply) => reply.key === …)` narrows `reply.data` to that event's type.
+
+## Migrating from 0.1
+
+0.2 replaces the callers with dispatchers and a worker:
+
+| 0.1 | 0.2 |
+|---|---|
+| `ICaller.call(key, data, metadata)` | `IDispatcher.dispatch(key, data, metadata?)`, resolves `{ correlationId, delivered }` |
+| `DirectCaller.call(key, data, metadata)` | `LocalDispatcher.dispatch(key, data, metadata?)` |
+| `DirectCaller.callAndWait(...)` → `{ [key]: data }` | `LocalDispatcher.dispatch(...).replies`, an array in emission order: `replies.find((r) => r.key === 'buildFinished')` |
+| `DirectCaller.callWith(key, data, metadata, { handle })` | `component.handle(key, data, metadata, { handle })`, or the `reply` option of `LocalDispatcher` |
+| `new DispatchCaller({ routing, messageBus, hooks })` | `new RemoteDispatcher({ routing, messageBus, hooks })` |
+| `DispatchCallerOptions`, `DispatchCallerHooks` | `RemoteDispatcherOptions`, `RemoteDispatcherHooks` |
+| `new WorkerCaller(component, { consumeRouting, publishRouting, messageBus, hooks })` | `new RemoteWorker(component, { consume, publish, messageBus, hooks })` |
+| `WorkerCallerOptions`, `WorkerCallerHooks` | `RemoteWorkerOptions`, `RemoteWorkerHooks` |
+| `WorkerCaller.call(...)` | `LocalDispatcher`; a `RemoteWorker` is no longer a caller |
+| `CallerPayload`, `DirectCallerResponse` | `ForwardedEvent`, `LocalDispatchResult` |
+| an `IComponent` passed to a caller | an `ICallable` (an `IComponent` whose `handle` is not optional); `Component` is one |
+
+Behaviour that changed:
+
+- **`onUnrouted` takes one event.** `onUnrouted(key, data, metadata)` is now
+  `onUnrouted({ key, data, metadata })`. A one-parameter hook written against 0.1, such as
+  `onUnrouted(key)`, still compiles but then receives the event object.
+- **New hook `RemoteWorkerHooks.onUndelivered(message)`:** a forwarded event the bus did not accept.
+  0.1 did not report it.
+- **Every command carries a `correlationId`.** `RemoteDispatcher` generates one when the metadata has
+  none; 0.1's `DispatchCaller` sent none.
+- **Commands drop a caller's `attempt` and `timestamp`.** Re-dispatching with an inbound
+  `context.metadata` no longer carries the delivery attempt over; pass it explicitly if a receiver
+  needs it.
+- **`delivered` replaces the void result.** Falling back to in-process work when the bus did not
+  accept a command no longer needs a hand-built `buildMessage` + `publish()`:
+  `if (!result.delivered) await local.dispatch(key, data, { correlationId: result.correlationId })`.
+- **Worker lifecycle races are handled.** `RemoteWorker` joins a concurrent `start()`, and a `stop()`
+  during `start()` leaves no consumer behind, so application-side ordering of starts and teardown
+  is no longer needed for that.
+- **Scheduled components** validate the cron expression when they are defined and destroy their
+  node-cron task on `stop()`.
 
 ## Hooks
 
