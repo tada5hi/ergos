@@ -2,7 +2,7 @@
 
 # synergos — Agent Guide
 
-An npm workspaces monorepo with two packages:
+An npm workspaces monorepo with three packages:
 
 - **`synergos`** (`packages/synergos`) — components with a `start` / `stop` / `status` lifecycle and
   optional command handlers (`Component`, `IComponent`), cron-driven background jobs
@@ -13,6 +13,10 @@ An npm workspaces monorepo with two packages:
 - **`@synergos/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
   [amqp-extension](https://www.npmjs.com/package/amqp-extension) (a real dependency);
   `synergos` is a peer.
+- **`@synergos/test`** (`packages/test`) — test kit for consumers and driver authors:
+  `defineDriverConformance` (the driver contract as test-framework-agnostic cases on `node:assert`;
+  callers pass vitest's / jest's / node:test's `describe` / `it`), `FakeMessageBus`, `drain()`.
+  `synergos` is a peer + dev dependency.
 
 Consumers: FLAME Hub and authup. ESM-only. Observability is through typed `hooks` options,
 not a logger.

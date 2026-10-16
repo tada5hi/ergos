@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryMessageBusDriver, buildMessage } from '../../src';
 import type { Message, MessageRouting } from '../../src';
-import { defineDriverConformance } from '../../src/conformance';
-import { drain } from './fakes/drain';
+import { drain } from '@synergos/test';
 
 const work: MessageRouting = { type: 'work', key: 'jobs' };
 
 const message = (routing: MessageRouting) => buildMessage({ type: 'run', metadata: { routing } });
 
 describe('src/message-bus/memory', () => {
-    defineDriverConformance({ describe, it }, () => new MemoryMessageBusDriver());
-
     it('should keep a WORK message until a consumer arrives', async () => {
         const driver = new MemoryMessageBusDriver();
         const seen: Message[] = [];

@@ -2,13 +2,13 @@
 // ponytail: @types/node comes in through vitest, not a dependency of its own
 import assert from 'node:assert/strict';
 import { setImmediate as tick } from 'node:timers/promises';
-import { buildMessage } from '../message-bus';
+import { buildMessage } from 'synergos';
 import type {
     IMessageBusDriver,
     Message,
     MessageHandler,
     MessageRouting,
-} from '../message-bus';
+} from 'synergos';
 import type { ConformanceDriverFactory, ConformanceFramework } from './types';
 
 /**

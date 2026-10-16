@@ -134,8 +134,8 @@ broker restart; a `RemoteWorker` drops the command's `metadata.persistent` from 
 forwards, so give its `publish` routing `persistent: true`.
 
 `publish()` resolves once the broker has confirmed the message, and rejects when it refuses
-it or the driver was closed. The driver passes synergos'
-[driver conformance](https://github.com/tada5hi/synergos/tree/master/packages/synergos#driver-conformance) suite.
+it or the driver was closed. The driver passes the
+[driver conformance](https://github.com/tada5hi/synergos/tree/master/packages/test#driver-conformance) suite of `@synergos/test`.
 
 ## Retries
 

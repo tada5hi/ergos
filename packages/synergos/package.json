@@ -20,10 +20,6 @@
         ".": {
             "types": "./dist/index.d.mts",
             "import": "./dist/index.mjs"
-        },
-        "./conformance": {
-            "types": "./dist/conformance.d.mts",
-            "import": "./dist/conformance.mjs"
         }
     },
     "files": [
@@ -52,5 +48,10 @@
     "license": "MIT",
     "dependencies": {
         "node-cron": "^4.6.0"
+    },
+    "nx": {
+        "implicitDependencies": [
+            "!@synergos/test"
+        ]
     }
 }

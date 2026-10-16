@@ -280,21 +280,9 @@ parses each delivery anew, the memory driver hands every consumer the published 
 
 ### Driver conformance
 
-`synergos/conformance` pins that contract as test cases. Hand it your test framework's `describe` /
-`it` and a driver factory; it asserts with `node:assert`, so it works with vitest, jest or
-`node:test`:
-
-```typescript
-import { describe, it } from 'vitest';
-import { defineDriverConformance } from 'synergos/conformance';
-
-defineDriverConformance({ describe, it }, () => new MyMessageBusDriver());
-```
-
-Each case gets a fresh driver and closes it. `MemoryMessageBusDriver` and `AmqpMessageBusDriver`
-run the same suite. Every case uses a key of its own; against a real broker, the durable queues the
-`work` and `queue` cases declare are left behind (`close()` deletes no queue), so point it at a
-throwaway vhost.
+[`@synergos/test`](https://github.com/tada5hi/synergos/tree/master/packages/test#driver-conformance)
+pins that contract as test cases, for vitest, jest or `node:test`. `MemoryMessageBusDriver` and
+`AmqpMessageBusDriver` both pass it; run it against your own driver too.
 
 ## Dispatchers and workers
 
@@ -530,7 +518,6 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
 | `buildMessage`, `isMessage`, `serializeMessage` | function | Message helpers |
 | `invokeHook` | function | Calls a hook and ignores a throw or rejection |
 | `MessageBusHooks`, `RemoteWorkerHooks`, `ScheduledComponentHooks` | type | Hook types |
-| `defineDriverConformance`, `ConformanceFramework`, `ConformanceDriverFactory` | function, type | From `synergos/conformance`: see [Driver conformance](#driver-conformance) |
 
 ## Notes
 

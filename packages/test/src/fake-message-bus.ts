@@ -5,7 +5,7 @@ import type {
     MessageHandler,
     MessageHandlers,
     MessageRouting,
-} from '../../../src';
+} from 'synergos';
 
 /**
  * Records publishes. Consumers are recorded, never fed.

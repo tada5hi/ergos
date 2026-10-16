@@ -11,7 +11,7 @@ import {
     buildMessage,
 } from 'synergos';
 import type { Message, MessageRouting } from 'synergos';
-import { defineDriverConformance } from 'synergos/conformance';
+import { defineDriverConformance } from '@synergos/test';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { hubWireFixture } from './fixtures/hub-wire';
 

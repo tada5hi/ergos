@@ -1,0 +1,55 @@
+{
+    "name": "@synergos/test",
+    "version": "0.0.0",
+    "type": "module",
+    "description": "Test-framework-agnostic conformance suite for synergos message bus drivers (vitest, jest, node:test).",
+    "author": {
+        "name": "Peter Placzek",
+        "email": "contact@tada5hi.net",
+        "url": "https://github.com/tada5hi"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tada5hi/synergos.git",
+        "directory": "packages/test"
+    },
+    "main": "dist/index.mjs",
+    "types": "dist/index.d.mts",
+    "exports": {
+        "./package.json": "./package.json",
+        ".": {
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "scripts": {
+        "build:types": "tsc --noEmit -p tsconfig.build.json",
+        "build:js": "tsdown",
+        "build": "npm run build:types && npm run build:js",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest --config test/vitest.config.ts --run",
+        "test:coverage": "vitest --config test/vitest.config.ts --run --coverage"
+    },
+    "keywords": [
+        "message-bus",
+        "conformance",
+        "test",
+        "synergos"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "license": "MIT",
+    "devDependencies": {
+        "synergos": "^0.1.0"
+    },
+    "peerDependencies": {
+        "synergos": "^0.1.0"
+    }
+}

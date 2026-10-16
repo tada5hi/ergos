@@ -1,4 +1,4 @@
-import type { IMessageBusDriver } from '../message-bus';
+import type { IMessageBusDriver } from 'synergos';
 
 /**
  * The part of a test framework the suite needs; vitest's and node:test's
