@@ -52,6 +52,11 @@ export interface IComponent<EventMap extends ComponentEventMap = ComponentEventM
     start(): Promise<void>;
     stop(): Promise<void>;
     status(): ComponentStatus;
+    /**
+     * Resolves once no work started by this component is still running. Optional:
+     * a shutdown over mixed components stops them all, then awaits `settled?.()`.
+     */
+    settled?(): Promise<void>;
     handle?<K extends keyof EventMap & string>(
         key: K,
         data: EventMap[K][0],
@@ -90,6 +95,9 @@ export type ScheduledComponentHooks = {
     onError?(error: unknown): void,
 };
 
+/**
+ * A component that can be drained: an IComponent whose settled is not optional.
+ */
 export interface IScheduledComponent extends IComponent {
     /**
      * Resolves once no pass is running (at once when none is). stop() does not

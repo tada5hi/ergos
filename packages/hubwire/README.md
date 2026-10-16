@@ -153,6 +153,7 @@ interface IComponent {
     start(): Promise<void>;
     stop(): Promise<void>;
     status(): ComponentStatus; // { lastSuccessAt?: number, runningSince?: number }
+    settled?(): Promise<void>; // resolves once no work started by the component runs
     handle?(key, data, metadata?, options?): Promise<void>;
 }
 ```
@@ -160,6 +161,15 @@ interface IComponent {
 `status()` reports top-level calls only (child events do not count): `runningSince` is set while
 a call is in flight, `lastSuccessAt` when the last one completed without throwing. `start()` and
 `stop()` do nothing on a plain `Component`. Override them to acquire and release background work.
+
+`settled()` is optional, so components of every kind share one array. A shutdown stops them all,
+then drains the ones that implement it:
+
+```typescript
+const components: IComponent[] = [cleaner, worker];
+await Promise.all(components.map((component) => component.stop()));
+await Promise.all(components.map((component) => component.settled?.()));
+```
 
 ## Scheduled components
 
