@@ -70,6 +70,7 @@ hubwire/
 
 | Module | Purpose |
 |---|---|
+| `hubwire/src/component/types.ts` | `IComponent` (`start` / `stop` / `status`, optional `handle` and `settled`), `ICallable` (`handle` required), `IScheduledComponent` (`settled` required) |
 | `hubwire/src/component/module.ts` | `Component`: key → handler map, `'*'` fallback, per-handler memoized `initialize()`, child events via `context.handle`, unhandled → `options.handle`, status of top-level calls |
 | `hubwire/src/component/scheduled.ts` | `defineScheduledComponent`: cron expression validated at definition, first pass on start, node-cron schedule with `noOverlap`, a failed pass → `hooks.onError`; `stop()` never waits for a pass (a pass may stop its own component), stop-during-start never schedules, the task is destroyed; returns an `IScheduledComponent` whose `settled()` resolves once no pass runs (a shutdown awaits it after `stop()`; a pass must never await its own) |
 | `hubwire/src/dispatcher/` | `IDispatcher` → `{ correlationId }`. `LocalDispatcher` (in-process, returns forwarded events as `replies`, optional `reply` component, no lifecycle), `RemoteDispatcher` (publishes a command; a rejected publish rejects `dispatch()`; no hooks) |
