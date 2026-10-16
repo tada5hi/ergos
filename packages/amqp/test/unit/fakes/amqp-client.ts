@@ -17,16 +17,23 @@ export type FakeAmqpConsume = {
     options: ConsumeOptions,
     handler: AmqpDeliveryHandler,
     cancelled: boolean,
+    inFlight: Set<Promise<void>>,
 };
 
 type FakeAmqpLog = {
     publishes: FakeAmqpPublish[],
     consumes: FakeAmqpConsume[],
-    closed: number,
+    closed?: number,
+    loopback?: { index: number, active: Map<string, Promise<void>> },
 };
 
 /**
  * Records what the driver hands amqp-extension; of() siblings share the log.
+ * FakeAmqpClient.loopback() also delivers each publish to the matching consumers:
+ * the default exchange round-robins (a queue), any other fans out (a queue per
+ * consumer, or one per options.queue, shared round-robin). A singleActiveConsumer
+ * queue goes to its first consumer, one handler at a time (prefetch 1).
+ * ponytail: no queue buffering, no retry; a handler error is dropped.
  */
 export class FakeAmqpClient implements IAmqpClient {
     protected exchange: Exchange;
@@ -38,15 +45,22 @@ export class FakeAmqpClient implements IAmqpClient {
         this.log = log ?? {
             publishes: [], 
             consumes: [], 
-            closed: 0, 
         };
+    }
+
+    static loopback(): FakeAmqpClient {
+        return new FakeAmqpClient(undefined, {
+            publishes: [],
+            consumes: [],
+            loopback: { index: 0, active: new Map() },
+        });
     }
 
     get publishes() { return this.log.publishes; }
 
     get consumes() { return this.log.consumes; }
 
-    get closed() { return this.log.closed; }
+    get closed() { return this.log.closed ?? 0; }
 
     of(exchange: Exchange): FakeAmqpClient {
         return new FakeAmqpClient(exchange, this.log);
@@ -59,6 +73,29 @@ export class FakeAmqpClient implements IAmqpClient {
             body, 
             options, 
         });
+
+        const { loopback } = this.log;
+        if (loopback) {
+            const matching = this.log.consumes.filter((entry) => !entry.cancelled &&
+                entry.key === key &&
+                entry.exchange.type === this.exchange.type &&
+                (entry.exchange.name || '') === (this.exchange.name || ''));
+            // a queue (the default exchange's, or a named one) delivers once, round-robin
+            const queues = Map.groupBy(matching, (entry) => (this.exchange.name ? entry.options.queue ?? entry : ''));
+            const single = !!options.singleActiveConsumer;
+            const targets = queues.values().toArray().map((group) => group[single ? 0 : loopback.index++ % group.length]!);
+            for (const entry of targets) {
+                const handled = (single ? loopback.active.get(key) ?? Promise.resolve() : Promise.resolve())
+                    .then(() => entry.handler({ content: Buffer.from(body), properties: {} }))
+                    .catch(() => {});
+                if (single) {
+                    loopback.active.set(key, handled);
+                }
+                entry.inFlight.add(handled);
+                handled.then(() => entry.inFlight.delete(handled));
+            }
+        }
+
         return true;
     }
 
@@ -69,17 +106,20 @@ export class FakeAmqpClient implements IAmqpClient {
             options, 
             handler: handlers.$any, 
             cancelled: false, 
+            inFlight: new Set(),
         };
         this.log.consumes.push(entry);
 
         return {
             cancel: async () => {
                 entry.cancelled = true;
+                await Promise.all(entry.inFlight);
             },
         };
     }
 
-    async close() {
-        this.log.closed++;
+    close() {
+        this.log.closed = this.closed + 1;
+        return Promise.resolve();
     }
 }

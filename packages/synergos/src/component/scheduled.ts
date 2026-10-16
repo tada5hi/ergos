@@ -1,14 +1,16 @@
 import type { ScheduledTask } from 'node-cron';
 import cron from 'node-cron';
 import { invokeHook } from '../hook';
-import type { IComponent, ScheduledComponentOptions } from './types';
+import type { IScheduledComponent, ScheduledComponentOptions } from './types';
 
 /**
  * A background job: one pass in start() (unless disabled), then one per cron
  * tick, never overlapping. A failing pass is reported to hooks.onError and never rejects —
  * start() is typically fire-and-forget, the next tick retries.
+ * stop() does not wait for a pass in flight; a shutdown awaits settled() after stop().
+ * A pass must never await its own component's settled() — it would deadlock.
  */
-export function defineScheduledComponent(options: ScheduledComponentOptions): IComponent {
+export function defineScheduledComponent(options: ScheduledComponentOptions): IScheduledComponent {
     // fail at definition, not after a full pass in start()
     if (!cron.validate(options.schedule)) {
         throw new Error(`Invalid cron expression: ${options.schedule}`);
@@ -64,10 +66,14 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IC
 
             const current = task;
             task = undefined;
-            // ponytail: does not wait for a pass in flight (a pass may stop its own component);
+            // does not wait for a pass in flight (a pass may stop its own component), see settled();
             // nothing is scheduled after it
             // destroy, not stop: a stopped task stays in node-cron's registry
             await current?.destroy();
+        },
+        async settled() {
+            // ponytail: one pass at most; a pass started meanwhile (a start() after stop()) is not awaited
+            await pass;
         },
         status: () => ({ lastSuccessAt, runningSince }),
     };

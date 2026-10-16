@@ -47,7 +47,7 @@ synergos gives all of that one shape:
 | **Health** | Ad-hoc flags, or none | `status()` reports `lastSuccessAt` and `runningSince` |
 | **Transport** | Handler code is written against amqplib, Redis or a function call | The handler only sees `(data, context)`. A `LocalDispatcher` or a `RemoteDispatcher` decides how it is reached, and both implement the same `IDispatcher` |
 | **Replies** | A second queue, wired and correlated by hand | `context.handle('buildFinished', …)` emits a reply, `RemoteWorker` publishes it, and the dispatch's `correlationId` carries over |
-| **Tests** | A broker in CI, or `vi.mock` on the client | `MemoryMessageBusDriver`: in-process, deterministic, and `publish()` rejects with the handler's error |
+| **Tests** | A broker in CI, or `vi.mock` on the client | `MemoryMessageBusDriver`: in-process and deterministic, with the same delivery contract as the amqp driver |
 | **Cron jobs** | Overlapping runs, an unhandled rejection on a failing pass | `defineScheduledComponent`: a first pass on start, no overlap, failures go to a hook |
 | **Shutdown** | Exit and hope the handler in flight finished | `RemoteWorker.stop()` waits for the handler in flight |
 | **Observability** | A logger dependency in every class | Typed `hooks` (`onError`, `onRetry`, …). A hook that throws is ignored and can never turn an ack into a retry |
@@ -78,13 +78,15 @@ await new RemoteDispatcher({ messageBus, routing: commands }).dispatch('build', 
 |---|---|---|
 | [`synergos`](./packages/synergos) | [![npm](https://badge.fury.io/js/synergos.svg)](https://npmjs.com/package/synergos) | Components, scheduled components, the message bus with its in-memory driver, the local and remote dispatchers, and the remote worker. One runtime dependency (`node-cron`) |
 | [`@synergos/amqp`](./packages/amqp) | [![npm](https://badge.fury.io/js/@synergos%2Famqp.svg)](https://npmjs.com/package/@synergos/amqp) | `AmqpMessageBusDriver`: the message bus over RabbitMQ, with retries and backoff, built on [amqp-extension](https://www.npmjs.com/package/amqp-extension) |
+| [`@synergos/test`](./packages/test) | [![npm](https://badge.fury.io/js/@synergos%2Ftest.svg)](https://npmjs.com/package/@synergos/test) | The driver conformance suite (vitest, jest, `node:test`) and test fakes (`FakeMessageBus`, `drain`) |
 
 ```bash
 npm install synergos --save
 npm install @synergos/amqp --save # for RabbitMQ
+npm install @synergos/test --save-dev # driver conformance, test fakes
 ```
 
-Both packages are ESM-only and require Node.js `>=22`.
+All packages are ESM-only and require Node.js `>=22`.
 
 ## Quick Start
 
@@ -163,8 +165,8 @@ const messageBus = new MessageBus({
 });
 ```
 
-The full API is in each package's README: [synergos](./packages/synergos/README.md) and
-[@synergos/amqp](./packages/amqp/README.md).
+The full API is in each package's README: [synergos](./packages/synergos/README.md),
+[@synergos/amqp](./packages/amqp/README.md) and [@synergos/test](./packages/test/README.md).
 
 ## Development
 

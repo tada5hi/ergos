@@ -90,6 +90,15 @@ export type ScheduledComponentHooks = {
     onError?(error: unknown): void,
 };
 
+export interface IScheduledComponent extends IComponent {
+    /**
+     * Resolves once no pass is running (at once when none is). stop() does not
+     * wait for a pass in flight; a shutdown awaits settled() after stop().
+     * A pass must never await its own component's settled(): it would wait for itself.
+     */
+    settled(): Promise<void>;
+}
+
 export type ScheduledComponentOptions = {
     /**
      * node-cron expression

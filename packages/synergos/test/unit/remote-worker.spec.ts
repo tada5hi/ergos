@@ -7,21 +7,31 @@ import {
     RemoteWorker,
     buildMessage,
 } from '../../src';
-import type { ForwardedEvent, Message, MessageRouting } from '../../src';
+import type {
+    ForwardedEvent,
+    Message,
+    MessageDelivery,
+    MessageRouting,
+} from '../../src';
 import type { TestEventMap } from './fakes/component';
 import { TestComponent } from './fakes/component';
-import { FakeMessageBus } from './fakes/message-bus';
+import { FakeMessageBus, drain  } from '@synergos/test';
 
 const commands: MessageRouting = { type: 'work', key: 'commands' };
 const replies: MessageRouting = { type: 'work', key: 'replies' };
 
 function setup() {
-    const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
+    const published: Message[] = [];
+    const messageBus = new MessageBus({
+        driver: new MemoryMessageBusDriver(),
+        hooks: { onPublish: (message) => { published.push(message); } },
+    });
     const component = new TestComponent();
     const dispatcher = new RemoteDispatcher<TestEventMap>({ messageBus, routing: commands });
 
     return {
         messageBus,
+        published,
         component,
         dispatcher,
     };
@@ -61,19 +71,19 @@ describe('src/worker/module', () => {
         await new RemoteWorker(inbox, { messageBus, consume: replies }).start();
 
         const { correlationId } = await dispatcher.dispatch('execute', { id: 'a' });
+        await drain();
 
         expect(recorded).toEqual([{ id: 'a' }, correlationId]);
     });
 
     it('should clean the forwarded metadata', async () => {
-        const { messageBus } = setup();
-        const attempts: unknown[] = [];
+        const { messageBus, published } = setup();
+        const deliveries: unknown[] = [];
         const component = new Component<TestEventMap>();
         component.mount('execute', async (data, ctx) => {
-            attempts.push(ctx.metadata.attempt);
+            deliveries.push(ctx.metadata.delivery);
             await ctx.handle('executionFinished', data);
         });
-        const received = await consumeReplies(messageBus);
 
         await new RemoteWorker(component, {
             messageBus,
@@ -85,8 +95,11 @@ describe('src/worker/module', () => {
         // the command's own transport metadata, as a handler's ctx.metadata would carry it
         const inbound = {
             timestamp: 1,
+            delivery: { attempt: 5, maxAttempts: 5 } satisfies MessageDelivery,
+            // a body counter from an older hub producer
             attempt: 5,
             persistent: true,
+            expiresAt: Date.now() + 60_000,
             correlationId: 'c',
             routing: commands,
         };
@@ -95,21 +108,29 @@ describe('src/worker/module', () => {
             data: { id: 'a' }, 
             metadata: inbound, 
         }));
+        await drain();
 
-        expect(attempts).toEqual([5]);
-        expect(received).toHaveLength(1);
-        const metadata = received[0]?.metadata;
+        // the driver's delivery info, never the one in a published body
+        expect(deliveries).toEqual([{ attempt: 1, maxAttempts: 1 }]);
+        // what went on the wire, not the consuming driver's copy
+        expect(published).toHaveLength(2);
+        const metadata = published[1]?.metadata;
         expect(metadata).toMatchObject({ correlationId: 'c', routing: replies });
+        expect(metadata).not.toHaveProperty('delivery');
         expect(metadata).not.toHaveProperty('attempt');
         expect(metadata).not.toHaveProperty('persistent');
+        expect(metadata).not.toHaveProperty('expiresAt');
         expect(metadata?.timestamp).toBeGreaterThanOrEqual(before);
     });
 
     it('should keep the key order of the forwarded metadata', async () => {
-        const { messageBus, dispatcher } = setup();
+        const {
+            messageBus,
+            published,
+            dispatcher,
+        } = setup();
         const component = new Component<TestEventMap>();
         component.mount('execute', (data, ctx) => ctx.handle('executionFinished', data, { step: 2 }));
-        const received = await consumeReplies(messageBus);
         await new RemoteWorker(component, {
             messageBus,
             consume: commands,
@@ -117,8 +138,9 @@ describe('src/worker/module', () => {
         }).start();
 
         await dispatcher.dispatch('execute', { id: 'a' }, { correlationId: 'c' });
+        await drain();
 
-        expect(Object.keys(received[0]?.metadata ?? {})).toEqual(['timestamp', 'correlationId', 'routing', 'step']);
+        expect(Object.keys(published[1]?.metadata ?? {})).toEqual(['timestamp', 'correlationId', 'routing', 'step']);
     });
 
     it('should forward an unknown command to publish', async () => {
@@ -131,8 +153,29 @@ describe('src/worker/module', () => {
             publish: replies,
         }).start();
         await new RemoteDispatcher({ messageBus, routing: commands }).dispatch('nope', {});
+        await drain();
 
         expect(received.map((message) => message.type)).toEqual(['nope']);
+    });
+
+    it('should fail the command when publishing a forwarded event rejects', async () => {
+        const messageBus = new FakeMessageBus();
+        messageBus.publishError = new Error('publish');
+        await new RemoteWorker(new TestComponent(), {
+            messageBus,
+            consume: commands,
+            publish: replies,
+        }).start();
+
+        const handler = messageBus.consumed[0]?.handlers['*'];
+        const command = buildMessage({
+            type: 'execute',
+            data: { id: 'a' },
+            metadata: { routing: commands },
+        });
+
+        // over amqp a rejected handler means a retry, never an ack with the reply lost
+        await expect(handler?.(command)).rejects.toThrow('publish');
     });
 
     it('should report a forwarded event with no publish routing to onUnrouted', async () => {
@@ -149,6 +192,7 @@ describe('src/worker/module', () => {
             hooks: { onUnrouted: (event) => { unrouted.push(event); } },
         }).start();
         const { correlationId } = await dispatcher.dispatch('execute', { id: 'a' });
+        await drain();
 
         expect(unrouted).toEqual([{
             key: 'executionFinished',
@@ -170,44 +214,9 @@ describe('src/worker/module', () => {
             hooks: { onUnrouted: () => { throw new Error('hook'); } },
         }).start();
 
-        await expect(dispatcher.dispatch('execute', { id: 'a' })).resolves.toMatchObject({ delivered: true });
+        await dispatcher.dispatch('execute', { id: 'a' });
+        await drain();
         expect(component.handled).toEqual(['a']);
-    });
-
-    it('should report an undelivered forwarded event and still settle the command', async () => {
-        const {
-            messageBus, 
-            component, 
-            dispatcher, 
-        } = setup();
-        const undelivered: Message[] = [];
-
-        await new RemoteWorker(component, {
-            messageBus,
-            consume: commands,
-            publish: replies,
-            hooks: { onUndelivered: (message) => { undelivered.push(message); } },
-        }).start();
-
-        await expect(dispatcher.dispatch('execute', { id: 'a' })).resolves.toMatchObject({ delivered: true });
-        expect(undelivered.map((message) => message.type)).toEqual(['executionFinished']);
-    });
-
-    it('should settle the command when onUndelivered throws', async () => {
-        const {
-            messageBus, 
-            component, 
-            dispatcher, 
-        } = setup();
-
-        await new RemoteWorker(component, {
-            messageBus,
-            consume: commands,
-            publish: replies,
-            hooks: { onUndelivered: () => { throw new Error('hook'); } },
-        }).start();
-
-        await expect(dispatcher.dispatch('execute', { id: 'a' })).resolves.toMatchObject({ delivered: true });
     });
 
     it('should stop only after the handler in flight finished', async () => {
@@ -223,16 +232,16 @@ describe('src/worker/module', () => {
         await worker.start();
 
         const order: string[] = [];
-        const dispatched = dispatcher.dispatch('execute', { id: 'a' });
-        await new Promise((resolve) => { setTimeout(resolve, 0); });
+        await dispatcher.dispatch('execute', { id: 'a' });
+        await drain();
         const stopped = worker.stop().then(() => { order.push('stopped'); });
 
-        await new Promise((resolve) => { setTimeout(resolve, 10); });
+        await drain();
         expect(order).toEqual([]);
         expect(component.lifecycle).toEqual(['start']);
 
         blocker.resolve();
-        await Promise.all([dispatched, stopped]);
+        await stopped;
 
         expect(component.handled).toEqual(['a']);
         expect(order).toEqual(['stopped']);
@@ -240,6 +249,7 @@ describe('src/worker/module', () => {
 
         // no longer consuming
         await dispatcher.dispatch('execute', { id: 'b' });
+        await drain();
         expect(component.handled).toEqual(['a']);
     });
 
@@ -255,6 +265,7 @@ describe('src/worker/module', () => {
         await worker.stop();
         await worker.start();
         await dispatcher.dispatch('execute', { id: 'a' });
+        await drain();
 
         expect(component.handled).toEqual(['a']);
         expect(component.lifecycle).toEqual(['start', 'stop', 'start']);
@@ -270,6 +281,7 @@ describe('src/worker/module', () => {
         await worker.start();
 
         await dispatcher.dispatch('execute', { id: 'a' });
+        await drain();
         expect(worker.status()).toEqual(component.status());
         expect(worker.status().lastSuccessAt).toBeTypeOf('number');
     });

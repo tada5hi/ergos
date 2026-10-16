@@ -5,7 +5,8 @@
 - **Runner**: [Vitest](https://vitest.dev)
 - **Test location**: per package, `packages/<pkg>/test/unit/**/*.{test,spec}.{js,ts}` — files outside this glob are **not** picked up
 - **Config**: `packages/<pkg>/test/vitest.config.ts` (the npm scripts pass `--config` explicitly).
-  `@synergos/amqp`'s config aliases `synergos` to `../synergos/src`, so its tests need no prior build.
+  Each config aliases `synergos` (and, in synergos and @synergos/amqp, `@synergos/test`) to the
+  sibling's `src`, so tests need no prior build.
 - **Prerequisite**: `npm ci`. No database, container, or external service is required.
 
 ## Running Tests
@@ -26,11 +27,23 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
 
 `test/unit/` holds the only test layer, one spec per module — synergos: `component`, `scheduled`,
 `hook`, `message-bus`, `memory-driver`, `local-dispatcher`, `remote-dispatcher`, `remote-worker`;
-@synergos/amqp: `driver`. Specs import the package under test from its **source** barrel
-(`'../../src'`), not from `dist/`; amqp specs import `synergos` by name (aliased to source).
+@synergos/amqp: `driver`; @synergos/test: `memory`. Specs import the package under test from its
+**source** barrel (`'../../src'`), not from `dist/`; other packages (`synergos`, `@synergos/test`)
+are imported by name (aliased to source).
 
-- **Fakes, never `vi.fn()` / `vi.mock()`.** Shared fakes live in `test/unit/fakes/`
-  (`TestComponent`, `FakeMessageBus` implementing `IMessageBus`, `FakeAmqpClient`). The memory
+- **Driver conformance.** `@synergos/test` (`packages/test/src/conformance/`) holds the driver contract as
+  cases (`defineDriverConformance({ describe, it }, createDriver)`, `node:assert`). Its `memory.spec`
+  runs it against `MemoryMessageBusDriver`, `driver.spec` (@synergos/amqp) against
+  `AmqpMessageBusDriver` over `FakeAmqpClient.loopback()` (round-robin per queue: the default
+  exchange's, or a consume's `options.queue`). A contract case goes there, not into a
+  driver spec; driver specs keep only driver-specific behaviour.
+- **Delivery is asynchronous.** `publish()` / `dispatch()` resolve before the handlers ran. Wait
+  for a handler with a deferred, or with `drain()` (from `@synergos/test`, one `setImmediate`:
+  the memory driver delivers on microtasks).
+
+- **Fakes, never `vi.fn()` / `vi.mock()`.** Package-private fakes live in `test/unit/fakes/`
+  (`TestComponent`, `FakeAmqpClient`); shared ones are published by `@synergos/test`
+  (`FakeMessageBus` implementing `IMessageBus`, `drain`). The memory
   driver is the bus in most dispatcher and worker specs. Hooks are asserted with plain objects whose hook
   functions push into an array.
 - Every hook has a spec that it fires, and each hook site has one that a throwing hook leaves
@@ -39,7 +52,8 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
   `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
 - `driver.spec.ts` (@synergos/amqp) runs against `FakeAmqpClient` (no broker) and compares every routing
   shape with `fixtures/hub-wire.ts`, captured from hub's former driver. The only allowed
-  difference is the retry counter (body `metadata.attempt` → `x-attempt` header). Never
+  difference is the retry counter (body `metadata.attempt` → `x-attempt` header, reported to the
+  handler as `metadata.delivery`). Never
   regenerate the fixture from this driver — that would make the comparison vacuous.
 - There is no broker-backed (RabbitMQ) integration test; amqp-extension's own suite covers the broker.
 - Each package's `tsconfig.json` includes `src/` and `test/` and is what `npm run typecheck` checks

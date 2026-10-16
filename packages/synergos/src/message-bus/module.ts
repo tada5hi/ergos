@@ -21,10 +21,14 @@ export class MessageBus implements IMessageBus {
         this.hooks = options.hooks;
     }
 
-    publish(message: Message): Promise<boolean> {
+    publish(message: Message): Promise<void> {
         invokeHook(this.hooks, 'onPublish', message);
 
         return this.driver.publish(message.metadata.routing, message);
+    }
+
+    close(): Promise<void> {
+        return this.driver.close();
     }
 
     consumeAny(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
@@ -34,6 +38,12 @@ export class MessageBus implements IMessageBus {
     consume(routing: MessageRouting, handlers: MessageHandlers): Promise<IMessageBusConsumer> {
         return this.driver.consume(routing, async (message) => {
             invokeHook(this.hooks, 'onConsume', message, routing);
+
+            // a retried or requeued message keeps its age, so every driver is covered here
+            if (message.metadata.expiresAt !== undefined && message.metadata.expiresAt <= Date.now()) {
+                invokeHook(this.hooks, 'onExpired', message, routing);
+                return;
+            }
 
             // own keys only: a type such as 'toString' must not hit Object.prototype
             const handler = (Object.hasOwn(handlers, message.type) ? handlers[message.type] : undefined) ??

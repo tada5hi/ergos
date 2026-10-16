@@ -3,8 +3,15 @@ import type { ConsumeMessage } from 'amqp-extension';
 import { describe, expect, it } from 'vitest';
 import { AmqpMessageBusDriver } from '../../src';
 import type { AmqpMalformedMessage, AmqpMessageBusDriverHooks } from '../../src';
-import { buildMessage } from 'synergos';
+import { setImmediate as tick } from 'node:timers/promises';
+import {
+    Component,
+    MessageBus,
+    RemoteWorker,
+    buildMessage,
+} from 'synergos';
 import type { Message, MessageRouting } from 'synergos';
+import { defineDriverConformance } from '@synergos/test';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { hubWireFixture } from './fixtures/hub-wire';
 
@@ -75,12 +82,14 @@ function toConsumeMessage(
 }
 
 describe('src/module', () => {
+    defineDriverConformance({ describe, it }, () => createDriver(FakeAmqpClient.loopback()));
+
     describe('wire compatibility with hub', () => {
         it.each(Object.keys(shapes) as (keyof typeof shapes)[])('should publish %s like hub', async (name) => {
             const client = new FakeAmqpClient();
             const routing = shapes[name];
 
-            await expect(createDriver(client).publish(routing, message(routing))).resolves.toBe(true);
+            await expect(createDriver(client).publish(routing, message(routing))).resolves.toBeUndefined();
 
             const [expected] = hubWireFixture[name];
             const [actual] = client.publishes;
@@ -145,6 +154,80 @@ describe('src/module', () => {
         expect(client.consumes[0]?.options).toMatchObject({ prefetchCount: 4, retry: { maxAttempts: 3, delay: 10 } });
     });
 
+    it('should consume a PUB_SUB queue through a named, retried queue and publish to it like plain PUB_SUB', async () => {
+        const client = new FakeAmqpClient();
+        const driver = new AmqpMessageBusDriver({
+            client,
+            defaultTopicExchange: 'FLAME',
+            maxAttempts: 3,
+        });
+        const seen: Message[] = [];
+        const subscription: MessageRouting = { ...shapes.pubSubNamespace, queue: 'hub-events' };
+
+        await driver.consume(subscription, (received) => { seen.push(received); });
+        await driver.publish(subscription, message(subscription));
+
+        const [consumed] = client.consumes;
+        expect(consumed?.exchange).toEqual({ type: 'topic', name: 'custom' });
+        expect(consumed?.key).toBe('events');
+        const { onError, ...options } = consumed?.options ?? {};
+        expect(options).toEqual({
+            prefetchCount: 1,
+            requeueOnFailure: true,
+            queue: 'hub-events',
+            retry: { maxAttempts: 3, delay: 1000 },
+        });
+        expect(typeof onError).toBe('function');
+        // the publisher declares no queue, so it never conflicts with the consumer's
+        expect(client.publishes[0]?.options).not.toHaveProperty('queue');
+
+        const content = Buffer.from(JSON.stringify(message(subscription)));
+        await consumed?.handler({ content, properties: { headers: { 'x-attempt': 2 } } });
+        expect(seen[0]?.metadata.delivery).toEqual({ attempt: 2, maxAttempts: 3 });
+    });
+
+    it('should map a namespaced WORK routing onto the durable queue `namespace/key` of the default exchange', async () => {
+        const client = new FakeAmqpClient();
+        const routing: MessageRouting = { ...shapes.work, namespace: 'custom' };
+
+        await createDriver(client).consume(routing, () => {});
+        // the publisher declares the queue too, so a message published before any consumer is kept
+        await createDriver(client).publish(routing, message(routing));
+
+        const [consumed] = client.consumes;
+        expect(consumed?.exchange).toEqual({ type: 'direct', name: '' });
+        expect(consumed?.key).toBe('custom/tasks');
+        const { onError, ...options } = consumed?.options ?? {};
+        expect(options).toEqual({
+            prefetchCount: 1,
+            requeueOnFailure: true,
+            retry,
+        });
+        expect(typeof onError).toBe('function');
+
+        const [published] = client.publishes;
+        expect(published?.exchange).toEqual({ type: 'direct', name: '' });
+        expect(published?.key).toBe('custom/tasks');
+        expect(published?.options).toEqual({
+            type: 'execute',
+            messageId: 'msg-1',
+            persistent: true,
+        });
+    });
+
+    it('should declare an ordered namespaced WORK queue single-active on publish and consume', async () => {
+        const client = new FakeAmqpClient();
+        const routing: MessageRouting = { ...shapes.workOrdered, namespace: 'custom' };
+
+        await createDriver(client).consume(routing, () => {});
+        await createDriver(client).publish(routing, message(routing));
+
+        expect(client.consumes[0]?.key).toBe('custom/replies');
+        expect(client.consumes[0]?.options.singleActiveConsumer).toBe(true);
+        expect(client.publishes[0]?.key).toBe('custom/replies');
+        expect(client.publishes[0]?.options.singleActiveConsumer).toBe(true);
+    });
+
     it('should report a retried WORK message to onRetry and a dropped one to onDrop', async () => {
         const client = new FakeAmqpClient();
         const retried: unknown[] = [];
@@ -191,48 +274,45 @@ describe('src/module', () => {
         expect(malformed).toHaveLength(1);
     });
 
-    it('should hand a parsed payload to the handler', async () => {
+    it('should hand a WORK handler its delivery attempt from the x-attempt header and maxAttempts', async () => {
         const client = new FakeAmqpClient();
         const seen: Message[] = [];
-        await createDriver(client).consume(shapes.pubSub, (received) => { seen.push(received); });
-
-        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.pubSub))), properties: {} });
-
-        expect(seen).toEqual([message(shapes.pubSub)]);
-    });
-
-    it('should hand a WORK handler its delivery attempt from the x-attempt header', async () => {
-        const client = new FakeAmqpClient();
-        const seen: Message[] = [];
-        await createDriver(client).consume(shapes.work, (received) => { seen.push(received); });
+        await new AmqpMessageBusDriver({
+            client,
+            defaultTopicExchange: 'FLAME',
+            maxAttempts: 3,
+        }).consume(shapes.work, (received) => { seen.push(received); });
 
         const content = Buffer.from(JSON.stringify(message(shapes.work)));
         await client.consumes[0]?.handler({ content, properties: { headers: { 'x-attempt': 3 } } });
         await client.consumes[0]?.handler({ content, properties: {} });
 
-        expect(seen.map((received) => received.metadata.attempt)).toEqual([3, 1]);
+        expect(seen.map((received) => received.metadata.delivery)).toEqual([
+            { attempt: 3, maxAttempts: 3 },
+            { attempt: 1, maxAttempts: 3 },
+        ]);
     });
 
-    it('should override an attempt counter in the body of a WORK message (an older hub producer)', async () => {
+    it('should override delivery info in the body of a message', async () => {
         const client = new FakeAmqpClient();
         const seen: Message[] = [];
         await createDriver(client).consume(shapes.work, (received) => { seen.push(received); });
 
-        const legacy = message(shapes.work);
-        legacy.metadata.attempt = 4;
-        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(legacy)), properties: {} });
+        const forged = message(shapes.work);
+        forged.metadata.delivery = { attempt: 4, maxAttempts: 4 };
+        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(forged)), properties: {} });
 
-        expect(seen[0]?.metadata.attempt).toBe(1);
+        expect(seen[0]?.metadata.delivery).toEqual({ attempt: 1, maxAttempts: 5 });
     });
 
-    it('should not set an attempt on a PUB_SUB message', async () => {
+    it('should report attempt 1 of 1 on a PUB_SUB message (not retried)', async () => {
         const client = new FakeAmqpClient();
         const seen: Message[] = [];
         await createDriver(client).consume(shapes.pubSub, (received) => { seen.push(received); });
 
         await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.pubSub))), properties: { headers: { 'x-attempt': 3 } } });
 
-        expect(seen[0]?.metadata.attempt).toBeUndefined();
+        expect(seen[0]?.metadata.delivery).toEqual({ attempt: 1, maxAttempts: 1 });
     });
 
     it('should let a handler error reach amqp-extension (which retries or nacks)', async () => {
@@ -297,22 +377,75 @@ describe('src/module', () => {
         expect(client.publishes[0]?.options.persistent).toBe(false);
     });
 
-    it('should return a consumer that cancels the amqp-extension consumer', async () => {
+    it('should make a routing persistent, a message flag still winning', async () => {
         const client = new FakeAmqpClient();
-        const consumer = await createDriver(client).consume(shapes.pubSub, () => {});
+        const routing: MessageRouting = { ...shapes.pubSub, persistent: true };
+        const opted = message(routing);
+        opted.metadata.persistent = false;
 
-        await consumer.cancel();
+        await createDriver(client).publish(routing, message(routing));
+        await createDriver(client).publish(routing, opted);
 
-        expect(client.consumes[0]?.cancelled).toBe(true);
+        expect(client.publishes.map((item) => item.options.persistent)).toEqual([true, false]);
+    });
+
+    it('should publish a RemoteWorker\'s events persistent through a persistent routing', async () => {
+        const client = FakeAmqpClient.loopback();
+        const messageBus = new MessageBus({ driver: createDriver(client) });
+        const component = new Component();
+        component.mount('execute', async (data, ctx) => {
+            await ctx.handle('executed', data);
+        });
+        await new RemoteWorker(component, {
+            messageBus,
+            consume: shapes.work,
+            publish: { ...shapes.pubSub, persistent: true },
+        }).start();
+
+        const command = message(shapes.work);
+        command.metadata.persistent = false;
+        await messageBus.publish(command);
+        await tick();
+
+        expect(client.publishes.map((item) => [item.key, item.options.persistent])).toEqual([
+            ['tasks', false],
+            ['events', true],
+        ]);
+    });
+
+    it('should map expiresAt to the expiration property (remaining ms, never negative)', async () => {
+        const client = new FakeAmqpClient();
+        const driver = createDriver(client);
+        const later = message(shapes.work);
+        later.metadata.expiresAt = Date.now() + 60_000;
+        const past = message(shapes.work);
+        past.metadata.expiresAt = 0;
+        const fractional = message(shapes.work);
+        fractional.metadata.expiresAt = Date.now() + 1000 / 3;
+
+        await driver.publish(shapes.work, later);
+        await driver.publish(shapes.work, past);
+        await driver.publish(shapes.work, message(shapes.work));
+        await driver.publish(shapes.work, fractional);
+
+        const [first, second, third, fourth] = client.publishes.map((entry) => entry.options.expiration);
+        expect(Number(first)).toBeGreaterThan(59_000);
+        expect(Number(first)).toBeLessThanOrEqual(60_000);
+        expect(first).toBeTypeOf('string');
+        expect(second).toBe('0');
+        expect(third).toBeUndefined();
+        // the broker only takes an integer
+        expect(fourth).toMatch(/^\d+$/);
     });
 
     it('should close the client', async () => {
         const client = new FakeAmqpClient();
         const driver = createDriver(client);
+        await driver.publish(shapes.work, message(shapes.work));
+
         await driver.close();
 
         expect(client.closed).toBe(1);
-        await expect(driver.publish(shapes.work, message(shapes.work))).rejects.toThrow('closed');
     });
 
     it('should create a client lazily from a connection string', async () => {

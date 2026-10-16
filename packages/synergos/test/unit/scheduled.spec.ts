@@ -124,6 +124,66 @@ describe('src/component/scheduled', () => {
         expect(cron.getTasks().size).toBe(baseline);
     });
 
+    it('should let settled() wait for the first pass in flight after stop()', async () => {
+        const gate = Promise.withResolvers<void>();
+        let done = false;
+        const c = defineScheduledComponent({
+            schedule: '0 0 1 1 *',
+            run: async () => { await gate.promise; done = true; },
+        });
+        const started = c.start();
+        await c.stop();
+        const settled = c.settled().then(() => done);
+        gate.resolve();
+        await expect(settled).resolves.toBe(true);
+        await started;
+    });
+
+    it('should let settled() wait for a later tick\'s pass in flight', async () => {
+        const entered = Promise.withResolvers<void>();
+        const gate = Promise.withResolvers<void>();
+        let done = false;
+        const c = defineScheduledComponent({
+            schedule: '* * * * * *',
+            runOnStart: false,
+            run: async () => {
+                entered.resolve();
+                await gate.promise;
+                done = true;
+            },
+        });
+        await c.start();
+        await entered.promise;
+        await c.stop();
+        const settled = c.settled().then(() => done);
+        gate.resolve();
+        await expect(settled).resolves.toBe(true);
+    });
+
+    it('should resolve settled() at once when no pass is running', async () => {
+        const c = defineScheduledComponent({
+            schedule: '0 0 1 1 *', 
+            runOnStart: false, 
+            run: async () => {}, 
+        });
+        await c.settled();
+        await c.start();
+        await c.settled();
+        await c.stop();
+        await c.settled();
+    });
+
+    it('should settle a pass that stops its own component', async () => {
+        const c = defineScheduledComponent({
+            schedule: '0 0 1 1 *',
+            run: async () => { await c.stop(); },
+        });
+        void c.start();
+        await c.settled();
+        expect(c.status().runningSince).toBeUndefined();
+        expect(c.status().lastSuccessAt).toBeTypeOf('number');
+    });
+
     it('should not leave a cron task behind after stop', async () => {
         const baseline = cron.getTasks().size;
         const c = defineScheduledComponent({ schedule: '0 0 1 1 *', run: async () => {} });

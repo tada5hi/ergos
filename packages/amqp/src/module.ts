@@ -8,6 +8,7 @@ import {
 import type { ConsumeOptions, QueueOptions } from 'amqp-extension';
 import {
     MessageRoutingType,
+    assertMessageRouting,
     invokeHook,
     isMessage,
     serializeMessage,
@@ -27,8 +28,10 @@ import type {
 
 /**
  * Maps the message bus onto amqp-extension. WORK routings go through the default
- * (direct) exchange and are retried by amqp-extension (x-attempt header, backoff,
- * redelivery guard); PUB_SUB routings go through a topic exchange and are not retried.
+ * (direct) exchange into the durable queue `key` (`namespace/key` with a namespace),
+ * and are retried by amqp-extension (x-attempt header, backoff, redelivery
+ * guard); PUB_SUB routings go through a topic exchange and are not retried,
+ * unless consumed through a named, durable `queue`, which is retried like WORK.
  * Delivery is at-least-once.
  */
 export class AmqpMessageBusDriver implements IMessageBusDriver {
@@ -63,29 +66,34 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
         return this.clientInstance;
     }
 
-    async publish(routing: MessageRouting, message: Message): Promise<boolean> {
+    async publish(routing: MessageRouting, message: Message): Promise<void> {
         // Resolves once the broker confirmed the message (a rejection throws);
         // amqplib's boolean only reports write-buffer backpressure.
-        await this.resolveExchange(routing).publish(routing.key, serializeMessage(message), {
+        await this.resolveExchange(routing).publish(this.resolveKey(routing), serializeMessage(message), {
             type: message.type,
             messageId: message.id,
-            persistent: message.metadata.persistent ?? routing.type === MessageRoutingType.WORK,
+            persistent: message.metadata.persistent ?? routing.persistent ?? routing.type === MessageRoutingType.WORK,
+            // per-message TTL: the broker drops it; MessageBus drops one that still arrives late
+            ...(message.metadata.expiresAt === undefined ?
+                {} :
+                { expiration: String(Math.max(0, Math.ceil(message.metadata.expiresAt - Date.now()))) }),
             ...this.resolveQueueOptions(routing),
         });
-
-        return true;
     }
 
     async consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
-        const isWork = routing.type === MessageRoutingType.WORK;
+        // a PUB_SUB queue is durable and shared, so it must not lose a failed message either
+        const isRetried = routing.type === MessageRoutingType.WORK || !!routing.queue;
+        const maxAttempts = isRetried ? this.options.maxAttempts ?? 5 : 1;
         const options: ConsumeOptions = {
             prefetchCount: this.options.prefetchCount ?? 1,
             // reached only when a retry re-publish fails: the message comes back as a redelivery
-            requeueOnFailure: isWork,
+            requeueOnFailure: isRetried,
             ...this.resolveQueueOptions(routing),
+            // only the consumer declares it: a topic publish declares no queue, so no 406
+            ...(routing.queue ? { queue: routing.queue } : {}),
         };
-        if (isWork) {
-            const maxAttempts = this.options.maxAttempts ?? 5;
+        if (isRetried) {
             options.retry = { maxAttempts, delay: this.options.retryDelay ?? 1000 };
             // The handler's own error reaches MessageBus' onError hook first.
             // ponytail: a crashed redelivery's retries are not reported by amqp-extension, only its drop.
@@ -121,17 +129,18 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
             };
         }
 
-        return this.resolveExchange(routing).consume(routing.key, options, {
+        return this.resolveExchange(routing).consume(this.resolveKey(routing), options, {
             $any: async (input) => {
                 const message = this.decode(routing, input.content);
                 if (!message) {
                     return;
                 }
 
-                if (isWork) {
-                    // amqp-extension counts attempts in the x-attempt header, not in the body
-                    message.metadata.attempt = resolveAttempt(input.properties);
-                }
+                // amqp-extension counts attempts in the x-attempt header, not in the body
+                message.metadata.delivery = {
+                    attempt: isRetried ? resolveAttempt(input.properties) : 1,
+                    maxAttempts,
+                };
 
                 await handler(message);
             },
@@ -177,9 +186,21 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
         return routing.ordered ? { singleActiveConsumer: true } : {};
     }
 
+    /**
+     * The queue of a WORK routing (publisher and consumer both declare it, so it keeps
+     * messages before the first consume), else the routing key.
+     * assertMessageRouting keeps a '/' out of the namespace, so no two routings share a queue.
+     */
+    protected resolveKey(routing: MessageRouting): string {
+        assertMessageRouting(routing);
+        return routing.type === MessageRoutingType.WORK && routing.namespace ?
+            `${routing.namespace}/${routing.key}` :
+            routing.key;
+    }
+
     protected resolveExchange(routing: MessageRouting): IAmqpClient {
         if (routing.type === MessageRoutingType.WORK) {
-            return this.client.of({ type: ExchangeType.DIRECT, name: routing.namespace || '' });
+            return this.client.of({ type: ExchangeType.DIRECT, name: '' });
         }
 
         return this.client.of({ type: ExchangeType.TOPIC, name: routing.namespace || this.options.defaultTopicExchange });

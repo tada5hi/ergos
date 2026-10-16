@@ -48,5 +48,10 @@
     "license": "MIT",
     "dependencies": {
         "node-cron": "^4.6.0"
+    },
+    "nx": {
+        "implicitDependencies": [
+            "!@synergos/test"
+        ]
     }
 }

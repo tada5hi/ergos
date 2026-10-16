@@ -11,8 +11,8 @@ export function correlate<M extends ComponentMetadata>(metadata?: M): M & { corr
 }
 
 /**
- * The transport owns attempt, timestamp and routing: a command re-dispatched with an inbound
- * ctx.metadata must not inherit them. A caller-given persistent is kept.
+ * The transport owns delivery (and a legacy body attempt), timestamp and routing: a command re-dispatched with an inbound
+ * ctx.metadata must not inherit them. A caller-given persistent and expiresAt are kept.
  */
 export function toMessage(
     key: string,
@@ -21,6 +21,8 @@ export function toMessage(
     routing: MessageRouting,
 ): Message {
     const rest = { ...metadata };
+    delete rest.delivery;
+    // an older hub producer's body counter: an older consumer would retry by it
     delete rest.attempt;
     delete rest.timestamp;
 
@@ -33,11 +35,12 @@ export function toMessage(
 }
 
 /**
- * A forwarded event gets the persistence of its own routing, not the command's.
+ * A forwarded event gets the persistence of its own routing and no expiry, not the command's.
  */
 export function toForwardedMessage(event: ForwardedEvent, routing: MessageRouting): Message {
     const metadata = { ...event.metadata };
     delete metadata.persistent;
+    delete metadata.expiresAt;
 
     return toMessage(event.key, event.data, metadata, routing);
 }

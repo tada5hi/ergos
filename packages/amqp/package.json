@@ -47,9 +47,10 @@
     },
     "license": "MIT",
     "dependencies": {
-        "amqp-extension": "^5.1.1"
+        "amqp-extension": "^5.1.2"
     },
     "devDependencies": {
+        "@synergos/test": "^0.0.0",
         "synergos": "^0.1.0"
     },
     "peerDependencies": {

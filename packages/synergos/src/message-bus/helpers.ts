@@ -1,5 +1,17 @@
 import type { ObjectLiteral } from '../types';
-import type { Message, MessageInput } from './types';
+import { MessageRoutingType } from './constants';
+import type { Message, MessageInput, MessageRouting } from './types';
+
+/**
+ * Throws a TypeError for a routing no driver may accept. A WORK namespace must not
+ * contain '/': amqp names the queue `namespace/key`, so 'a/b' + 'c' and 'a' + 'b/c'
+ * would share one queue.
+ */
+export function assertMessageRouting(routing: MessageRouting): void {
+    if (routing.type === MessageRoutingType.WORK && routing.namespace?.includes('/')) {
+        throw new TypeError(`The namespace of a work routing must not contain '/': ${routing.namespace}`);
+    }
+}
 
 function isObject(input: unknown): input is ObjectLiteral {
     return typeof input === 'object' && input !== null && !Array.isArray(input);

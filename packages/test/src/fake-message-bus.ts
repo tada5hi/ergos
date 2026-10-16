@@ -5,11 +5,12 @@ import type {
     MessageHandler,
     MessageHandlers,
     MessageRouting,
-} from '../../../src';
+} from 'synergos';
 
 /**
- * Records publishes; answers each with `accepted`. Consumers are recorded, never fed.
- * `consume` awaits `consumeGate`, rejects with `consumeError`; `cancel` rejects with `cancelError`;
+ * Records publishes. Consumers are recorded, never fed.
+ * `publish` rejects with `publishError`; `consume` awaits `consumeGate`, rejects with `consumeError`;
+ * `cancel` rejects with `cancelError`;
  * `active` counts uncancelled consumers.
  */
 export class FakeMessageBus implements IMessageBus {
@@ -17,20 +18,24 @@ export class FakeMessageBus implements IMessageBus {
 
     consumed: { routing: MessageRouting, handlers: MessageHandlers }[] = [];
 
-    accepted = true;
-
     consumeGate: Promise<void> | undefined;
 
     consumeError: unknown;
 
     cancelError: unknown;
 
+    publishError: unknown;
+
     active = 0;
 
-    async publish(message: Message): Promise<boolean> {
+    async publish(message: Message): Promise<void> {
+        if (this.publishError) {
+            throw this.publishError;
+        }
         this.published.push(message);
-        return this.accepted;
     }
+
+    close(): Promise<void> { return Promise.resolve(); }
 
     async consume(routing: MessageRouting, handlers: MessageHandlers): Promise<IMessageBusConsumer> {
         await this.consumeGate;

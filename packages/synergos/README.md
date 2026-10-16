@@ -63,6 +63,7 @@ health-check all of them in one loop.
   - [Routing](#routing)
   - [Consuming](#consuming)
   - [Drivers](#drivers)
+  - [Driver conformance](#driver-conformance)
 - [Dispatchers and workers](#dispatchers-and-workers)
   - [Forwarded events](#forwarded-events)
   - [Publishing selected replies](#publishing-selected-replies)
@@ -178,6 +179,7 @@ const cleaner = defineScheduledComponent({
 await cleaner.start(); // one pass now, then one per tick
 cleaner.status();      // { lastSuccessAt, runningSince }
 await cleaner.stop();
+await cleaner.settled(); // the pass in flight, if any, has finished
 ```
 
 - `start()` runs a first pass before scheduling. Pass `runOnStart: false` to wait for the first tick.
@@ -186,6 +188,9 @@ await cleaner.stop();
 - `stop()` never waits for a pass in flight, so a pass may stop its own component. Stopped during
   the first pass, the component never schedules a tick. A pass must not *await* its component's
   `start()`, which would join the pass itself: restart with `void cleaner.start()`.
+- A shutdown that must outlive the pass (e.g. before closing the database) awaits `settled()`
+  after `stop()`; it resolves at once when no pass is running. A pass must never await its own
+  component's `settled()`: it would wait for itself and deadlock.
 - An invalid cron expression throws when the component is defined, before any pass runs.
 
 ## Message bus
@@ -209,18 +214,24 @@ await messageBus.publish(buildMessage({
 }));
 ```
 
-A message is `{ id, type, data, metadata: { timestamp, routing, persistent? } }`. `buildMessage()`
+A message is `{ id, type, data, metadata: { timestamp, routing, persistent?, expiresAt?, delivery? } }`. `buildMessage()`
 fills in the `id` and `timestamp`, `isMessage()` checks the shape, and `serializeMessage()` writes
 JSON that keeps `Error`s as `{ name, message, code? }`.
+
+`expiresAt` (epoch ms) makes a message expire: one consumed after it is settled (acked) without
+running a handler and reported to `onExpired`, also when it was retried or requeued. Pass it per
+dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_000 })`.
 
 ### Routing
 
 | Field | Purpose |
 |---|---|
-| `type` | `'work'`: each message goes to one consumer (round-robin). `'pubSub'`: each message goes to every consumer |
+| `type` | `'work'`: each message goes to one consumer (round-robin), also with a `namespace`. `'pubSub'`: each message goes to every consumer |
 | `key` | The queue (work) or routing key (pubSub) |
-| `namespace` | Optional. Separates routings with the same key, e.g. an exchange name in the amqp driver |
-| `ordered` | `work` only: one consumer at a time, in publish order, with failover to another replica |
+| `namespace` | Optional. Separates routings with the same key; the amqp driver prefixes a `work` queue with it (`namespace/key`) and uses it as a `pubSub` exchange name. A `work` namespace must not contain `/` (both drivers reject it with a `TypeError`) |
+| `ordered` | `work` only: one consumer and one handler at a time, in publish order, with failover to another replica. A retried message re-enters at the end of the queue, behind the ones published after it |
+| `persistent` | Optional. Whether the routing's messages survive a broker restart (amqp default: `work` yes, `pubSub` no); a message's `metadata.persistent` wins. The memory driver ignores it |
+| `queue` | `pubSub` consume only: a durable subscription. Consumers naming the same queue share its messages (each once, retried like `work`); each queue name gets its own copy. Publishers omit it |
 
 ### Consuming
 
@@ -229,15 +240,49 @@ type. A message that no handler accepts is settled (acked) without error and rep
 `onUnhandled`. `consumeAny(routing, handler)` is `consume()` with a single `'*'` handler. Both
 resolve to a consumer whose `cancel()` resolves once the handlers in flight have settled.
 
+Every driver sets `metadata.delivery = { attempt, maxAttempts }` on the message it hands a
+handler. `attempt` is 1-based, `maxAttempts` is how often the driver tries before it drops the
+message (`1` when it does not retry). A handler can tell its last attempt apart, e.g. to report a
+failure instead of throwing once more:
+
+```typescript
+const { attempt, maxAttempts } = message.metadata.delivery ?? { attempt: 1, maxAttempts: 1 };
+if (attempt < maxAttempts && isTransient(error)) throw error; // let the driver retry
+```
+
+`delivery` is never published: dispatchers and workers strip it before a message goes out.
+
 ### Drivers
 
 | Driver | Package | Use it for |
 |---|---|---|
-| `MemoryMessageBusDriver` | `synergos` | Tests and single-process apps. `publish()` awaits the handlers, rejects with their error and resolves `false` when no consumer matched |
+| `MemoryMessageBusDriver` | `synergos` | Tests and single-process apps. No retries: a failed handler's message is dropped (`delivery` is `1/1`) |
 | `AmqpMessageBusDriver` | [`@synergos/amqp`](https://npmjs.com/package/@synergos/amqp) | RabbitMQ: persistent work queues, retries with backoff, topic exchanges for pubSub |
 
 A driver implements `IMessageBusDriver`: `publish(routing, message)`, `consume(routing, handler)`
-and an optional `close()`.
+and `close()`. Every driver keeps the same contract:
+
+- `publish()` resolves once the transport took the message (amqp: broker confirm, memory:
+  enqueued). It never waits for a handler, and a handler's error never reaches it. It rejects
+  only when the hand-off fails, e.g. after `close()`.
+- A `work` message reaches one consumer (an `ordered` one: one handler at a time); a `pubSub`
+  message reaches every consumer, except that the consumers naming the same `queue` share one
+  copy. `publish()` ignores `queue`.
+- `cancel()` resolves once the consumer's handlers in flight settled; `close()` makes later
+  publishes and consumes reject. `MessageBus.close()` closes its driver.
+
+The memory driver keeps amqp's queue semantics: a `work` routing (per `namespace` and `key`) is a
+queue that keeps a message until a consumer takes it, and so is a `pubSub` `queue` once a consumer
+declared it (round-robin across its consumers); any other routing gives each consumer its own copy
+and drops a message nobody consumes (amqp: an exclusive queue per consumer). Unlike amqp, which
+parses each delivery anew, the memory driver hands every consumer the published message's own
+`data` object: a handler must not mutate it.
+
+### Driver conformance
+
+[`@synergos/test`](https://github.com/tada5hi/synergos/tree/master/packages/test#driver-conformance)
+pins that contract as test cases, for vitest, jest or `node:test`. `MemoryMessageBusDriver` and
+`AmqpMessageBusDriver` both pass it; run it against your own driver too.
 
 ## Dispatchers and workers
 
@@ -246,7 +291,7 @@ and an optional `close()`.
 </p>
 
 Both dispatchers implement `IDispatcher`: `dispatch(key, data, metadata?)` resolves
-`{ correlationId, delivered }`. The `correlationId` is `metadata.correlationId`, or a fresh UUID
+`{ correlationId }`. The `correlationId` is `metadata.correlationId`, or a fresh UUID
 when the metadata has none, and every forwarded event carries it.
 
 | Class | Where the component runs | Forwarded events |
@@ -313,20 +358,6 @@ const dispatcher: IDispatcher<BuilderEvents> = messageBus
     : new LocalDispatcher(new Builder(), { reply: inbox });
 ```
 
-### Falling back when the bus did not deliver
-
-`delivered` tells whether the bus accepted the command. It is always `true` for a
-`LocalDispatcher`; a `RemoteDispatcher` resolves `false` when no consumer matched (memory driver),
-so an application can run the command in-process instead. Pass the `correlationId` on, so the
-replies still match the original dispatch:
-
-```typescript
-const result = await remote.dispatch('build', { id: '1' });
-if (!result.delivered) {
-    await local.dispatch('build', { id: '1' }, { correlationId: result.correlationId });
-}
-```
-
 ### Lifecycle
 
 A `RemoteWorker` is itself an `IComponent`: start and stop it with the rest of your application.
@@ -346,18 +377,18 @@ the child events it emits through `context.handle` (its replies), *and* a top-le
 handler and no `'*'` accepted. The latter is on purpose, so a component can pass work on to the
 next one. Dispatchers and workers treat both kinds the same.
 
-A `RemoteWorker` passes an inbound command's metadata to the component unchanged, including
-`attempt` from a retrying driver. The events it publishes keep the rest of the metadata (such as
-the `correlationId`) but drop the command's `attempt`, `timestamp`, `persistent` and `routing`.
-Likewise, a `RemoteDispatcher` never sends a caller's `attempt`, `timestamp` or `routing`, so
+A `RemoteWorker` passes an inbound command's metadata to the component unchanged, including the
+driver's `delivery`. The events it publishes keep the rest of the metadata (such as the
+`correlationId`) but drop the command's `delivery`, `timestamp`, `persistent`, `expiresAt` and `routing`;
+the `persistent` of its `publish` routing applies instead.
+Likewise, a `RemoteDispatcher` never sends a caller's `delivery`, `timestamp` or `routing`, so
 dispatching with an inbound `context.metadata` (to keep the `correlationId`) starts a fresh command;
-only a `persistent` the caller passes is kept. A `LocalDispatcher` hands the metadata to the
+only a `persistent` or `expiresAt` the caller passes is kept. A `LocalDispatcher` hands the metadata to the
 component as given.
 
-A forwarded event whose publish resolves `false` (no consumer, memory driver) is reported to
-`onUndelivered`, and the command still settles (acked): a retry would re-run its side effects for a
-reply-only problem. A publish that *rejects* fails the command like a throwing handler: over AMQP the
-command is retried, and with the memory driver an inbox handler's error rejects `dispatch()`.
+A forwarded event whose publish *rejects* fails the command like a throwing handler: over AMQP the
+command is retried. An inbox handler's error stays with the inbox's own consumer; it never reaches
+the worker or `dispatch()`.
 
 ### Publishing selected replies
 
@@ -377,7 +408,7 @@ for (const reply of replies) {
 }
 ```
 
-Unlike a `RemoteWorker`, a `RemoteDispatcher` keeps a `persistent` flag present in that metadata.
+Unlike a `RemoteWorker`, a `RemoteDispatcher` keeps a `persistent` flag or `expiresAt` present in that metadata.
 
 ### Testing a handler
 
@@ -389,7 +420,8 @@ const component = new Component<BuilderEvents>();
 component.mount('build', buildHandler);
 
 // e.g. the last delivery attempt of a retrying driver
-const { replies } = await new LocalDispatcher(component).dispatch('build', { id: '1' }, { attempt: 5 });
+const { replies } = await new LocalDispatcher(component)
+    .dispatch('build', { id: '1' }, { delivery: { attempt: 5, maxAttempts: 5 } });
 
 const failed = replies.find((reply) => reply.key === 'buildFailed');
 ```
@@ -402,12 +434,12 @@ const failed = replies.find((reply) => reply.key === 'buildFailed');
 
 | 0.1 | 0.2 |
 |---|---|
-| `ICaller.call(key, data, metadata)` | `IDispatcher.dispatch(key, data, metadata?)`, resolves `{ correlationId, delivered }` |
+| `ICaller.call(key, data, metadata)` | `IDispatcher.dispatch(key, data, metadata?)`, resolves `{ correlationId }` |
 | `DirectCaller.call(key, data, metadata)` | `LocalDispatcher.dispatch(key, data, metadata?)` |
 | `DirectCaller.callAndWait(...)` → `{ [key]: data }` | `LocalDispatcher.dispatch(...).replies`, an array in emission order: `replies.find((r) => r.key === 'buildFinished')` |
 | `DirectCaller.callWith(key, data, metadata, { handle })` | `component.handle(key, data, metadata, { handle })`, or the `reply` option of `LocalDispatcher` |
-| `new DispatchCaller({ routing, messageBus, hooks })` | `new RemoteDispatcher({ routing, messageBus, hooks })` |
-| `DispatchCallerOptions`, `DispatchCallerHooks` | `RemoteDispatcherOptions`, `RemoteDispatcherHooks` |
+| `new DispatchCaller({ routing, messageBus, hooks })` | `new RemoteDispatcher({ routing, messageBus })` |
+| `DispatchCallerOptions`, `DispatchCallerHooks` | `RemoteDispatcherOptions` (no hooks) |
 | `new WorkerCaller(component, { consumeRouting, publishRouting, messageBus, hooks })` | `new RemoteWorker(component, { consume, publish, messageBus, hooks })` |
 | `WorkerCallerOptions`, `WorkerCallerHooks` | `RemoteWorkerOptions`, `RemoteWorkerHooks` |
 | `WorkerCaller.call(...)` | `LocalDispatcher`; a `RemoteWorker` is no longer a caller |
@@ -419,16 +451,19 @@ Behaviour that changed:
 - **`onUnrouted` takes one event.** `onUnrouted(key, data, metadata)` is now
   `onUnrouted({ key, data, metadata })`. A one-parameter hook written against 0.1, such as
   `onUnrouted(key)`, still compiles but then receives the event object.
-- **New hook `RemoteWorkerHooks.onUndelivered(message)`:** a forwarded event the bus did not accept.
-  0.1 did not report it.
+- **One delivery contract for every driver.** `publish()` resolves `void` once the transport took
+  the message; `MemoryMessageBusDriver` no longer awaits the handlers, never rejects with their
+  error and keeps a `work` message until a consumer takes it. Tests that relied on `publish()` (or
+  `dispatch()`) resolving after the handlers must wait for them. `IMessageBusDriver.close()` is
+  required, and `IMessageBus` has `close()`.
+- **`metadata.delivery` replaces `metadata.attempt`.** Every driver sets
+  `{ attempt, maxAttempts }` on consume, so a handler no longer assumes the driver's default
+  `maxAttempts`.
 - **Every command carries a `correlationId`.** `RemoteDispatcher` generates one when the metadata has
   none; 0.1's `DispatchCaller` sent none.
-- **Commands drop a caller's `attempt` and `timestamp`.** Re-dispatching with an inbound
+- **Commands drop a caller's `delivery`, `timestamp` and a legacy body `attempt`.** Re-dispatching with an inbound
   `context.metadata` no longer carries the delivery attempt over; pass it explicitly if a receiver
   needs it.
-- **`delivered` replaces the void result.** Falling back to in-process work when the bus did not
-  accept a command no longer needs a hand-built `buildMessage` + `publish()`:
-  `if (!result.delivered) await local.dispatch(key, data, { correlationId: result.correlationId })`.
 - **Worker lifecycle races are handled.** `RemoteWorker` joins a concurrent `start()`, and a `stop()`
   during `start()` leaves no consumer behind, so application-side ordering of starts and teardown
   is no longer needed for that.
@@ -445,10 +480,9 @@ to your logger, metrics or tracing:
 | `MessageBus` | `onPublish(message)` | Before a message is handed to the driver |
 | | `onConsume(message, routing)` | A message arrived, before dispatch |
 | | `onUnhandled(message, routing)` | No handler (and no `'*'`) accepted it. It is acked |
+| | `onExpired(message, routing)` | Its `metadata.expiresAt` had passed. It is acked without a handler |
 | | `onError(error, message, routing)` | A handler threw. The error is rethrown to the driver afterwards |
-| `RemoteDispatcher` | `onUndelivered(message)` | `publish()` resolved `false`: no consumer matched (memory driver). `dispatch()` resolves `delivered: false` |
 | `RemoteWorker` | `onUnrouted(event)` | A forwarded event was dropped because no `publish` routing is set |
-| | `onUndelivered(message)` | Publishing a forwarded event resolved `false`. The command still settles |
 | `defineScheduledComponent` | `onError(error)` | A pass failed |
 
 ```typescript
@@ -470,19 +504,21 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
 | Export | Kind | Purpose |
 |---|---|---|
 | `Component` | class | `mount()`, `unmount()`, `handle()`, `initialize()`, `start()`, `stop()`, `status()` |
-| `defineScheduledComponent` | function | A node-cron job as an `IComponent` |
+| `defineScheduledComponent` | function | A node-cron job as an `IScheduledComponent` (an `IComponent` with `settled()`) |
 | `IComponent`, `ComponentStatus`, `ComponentEventMap`, `ComponentMetadata`, `ComponentHandler`, `ComponentHandlerFn`, `ComponentHandlerContext`, `ComponentHandleOptions` | type | The component contract and handler types |
 | `ICallable`, `ForwardedEvent` | type | A component with a `handle()`, and one forwarded event |
+| `IScheduledComponent`, `ScheduledComponentOptions` | type | A scheduled component, and its options |
 | `LocalDispatcher`, `RemoteDispatcher`, `RemoteWorker` | class | See [Dispatchers and workers](#dispatchers-and-workers) |
 | `IDispatcher`, `DispatchResult`, `LocalDispatchResult`, `LocalDispatcherOptions`, `RemoteDispatcherOptions`, `RemoteWorkerOptions` | type | Dispatcher contract, results and options |
 | `MessageBus` | class | Type dispatch over a driver, with hooks |
 | `MemoryMessageBusDriver` | class | In-process driver |
 | `IMessageBus`, `IMessageBusDriver`, `IMessageBusConsumer` | type | The bus, driver and consumer contracts |
-| `Message`, `MessageRouting`, `MessageHandler`, `MessageHandlers`, `MessageInput` | type | Message shapes |
+| `Message`, `MessageRouting`, `MessageDelivery`, `MessageHandler`, `MessageHandlers`, `MessageInput` | type | Message shapes |
 | `MessageRoutingType` | enum | `WORK` (`'work'`), `PUB_SUB` (`'pubSub'`) |
 | `buildMessage`, `isMessage`, `serializeMessage` | function | Message helpers |
+| `assertMessageRouting` | function | Throws a `TypeError` for a routing no driver accepts (a `work` namespace with `/`); drivers call it in `publish()` / `consume()` |
 | `invokeHook` | function | Calls a hook and ignores a throw or rejection |
-| `MessageBusHooks`, `RemoteDispatcherHooks`, `RemoteWorkerHooks`, `ScheduledComponentHooks` | type | Hook types |
+| `MessageBusHooks`, `RemoteWorkerHooks`, `ScheduledComponentHooks` | type | Hook types |
 
 ## Notes
 
@@ -491,9 +527,10 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
   `options.handle`. Through a dispatcher or a `RemoteWorker`, it is a
   [forwarded event](#forwarded-events).
 - **A handler that throws rejects the call.** Through a `RemoteWorker`, the error reaches the bus
-  (`onError`) and the driver decides: the memory driver rejects `publish()`, the amqp driver retries.
-- **`MemoryMessageBusDriver` awaits end to end:** `publish()` resolves after every matching
-  handler has finished, replies included, which makes tests deterministic.
+  (`onError`) and the driver decides: the memory driver drops the message, the amqp driver retries.
+- **`MemoryMessageBusDriver` delivers asynchronously:** handlers run after `publish()` resolved, on
+  a later microtask. In a test, wait for the handler (e.g. a `Promise.withResolvers()` it resolves),
+  not for `publish()` or `dispatch()`.
 
 ## License
 

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { RemoteDispatcher } from '../../src';
-import type { Message, MessageRouting } from '../../src';
+import type { MessageRouting } from '../../src';
 import type { TestEventMap } from './fakes/component';
-import { FakeMessageBus } from './fakes/message-bus';
+import { FakeMessageBus } from '@synergos/test';
 
 const routing: MessageRouting = { type: 'work', key: 'commands' };
 
 class RejectingMessageBus extends FakeMessageBus {
-    override async publish(): Promise<boolean> {
+    override async publish(): Promise<void> {
         throw new Error('publish');
     }
 }
@@ -27,12 +27,20 @@ describe('src/dispatcher/remote', () => {
         expect(message?.metadata).toMatchObject({ correlationId: result.correlationId });
     });
 
-    it('should keep a given correlationId and persistent', async () => {
+    it('should keep a given correlationId, persistent and expiresAt', async () => {
         const messageBus = new FakeMessageBus();
         await new RemoteDispatcher<TestEventMap>({ messageBus, routing })
-            .dispatch('execute', { id: 'a' }, { correlationId: 'c', persistent: false });
+            .dispatch('execute', { id: 'a' }, {
+                correlationId: 'c',
+                persistent: false,
+                expiresAt: 5,
+            });
 
-        expect(messageBus.published[0]?.metadata).toMatchObject({ correlationId: 'c', persistent: false });
+        expect(messageBus.published[0]?.metadata).toMatchObject({
+            correlationId: 'c',
+            persistent: false,
+            expiresAt: 5,
+        });
     });
 
     it('should generate a correlationId for an empty one', async () => {
@@ -48,6 +56,8 @@ describe('src/dispatcher/remote', () => {
         const messageBus = new FakeMessageBus();
         const inbound = {
             timestamp: 1,
+            delivery: { attempt: 3, maxAttempts: 5 },
+            // a body counter from an older hub producer
             attempt: 3,
             persistent: false,
             routing: { type: 'pubSub', key: 'other' } as MessageRouting,
@@ -58,51 +68,12 @@ describe('src/dispatcher/remote', () => {
             .dispatch('execute', { id: 'a' }, inbound);
 
         const metadata = messageBus.published[0]?.metadata;
+        expect(metadata).not.toHaveProperty('delivery');
         expect(metadata).not.toHaveProperty('attempt');
         expect(metadata?.timestamp).toBeGreaterThanOrEqual(before);
         expect(metadata?.routing).toEqual(routing);
         expect(metadata).toMatchObject({ correlationId: 'c', persistent: false });
         expect(Object.keys(metadata ?? {})).toEqual(['timestamp', 'persistent', 'routing', 'correlationId']);
-    });
-
-    it('should report delivered from the bus', async () => {
-        const messageBus = new FakeMessageBus();
-        const dispatcher = new RemoteDispatcher<TestEventMap>({ messageBus, routing });
-
-        await expect(dispatcher.dispatch('execute', { id: 'a' })).resolves.toMatchObject({ delivered: true });
-
-        messageBus.accepted = false;
-        await expect(dispatcher.dispatch('execute', { id: 'a' })).resolves.toMatchObject({ delivered: false });
-    });
-
-    it('should report an undelivered command to onUndelivered', async () => {
-        const undelivered: Message[] = [];
-        const messageBus = new FakeMessageBus();
-        messageBus.accepted = false;
-
-        await new RemoteDispatcher<TestEventMap>({
-            messageBus,
-            routing,
-            hooks: { onUndelivered: (message) => { undelivered.push(message); } },
-        }).dispatch('execute', { id: 'a' });
-
-        expect(undelivered).toEqual([messageBus.published[0]]);
-    });
-
-    it('should resolve the same result when onUndelivered throws', async () => {
-        const messageBus = new FakeMessageBus();
-        messageBus.accepted = false;
-
-        const dispatcher = new RemoteDispatcher<TestEventMap>({
-            messageBus,
-            routing,
-            hooks: { onUndelivered: () => { throw new Error('hook'); } },
-        });
-
-        await expect(dispatcher.dispatch('execute', { id: 'a' })).resolves.toEqual({
-            delivered: false,
-            correlationId: expect.any(String),
-        });
     });
 
     it('should reject when publish rejects', async () => {

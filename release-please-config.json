@@ -5,7 +5,8 @@
     "initial-version": "0.1.0",
     "packages": {
         "packages/synergos": {"component": "synergos"},
-        "packages/amqp": {"component": "amqp"}
+        "packages/amqp": {"component": "amqp"},
+        "packages/test": {"component": "test"}
     },
     "plugins": [
         {

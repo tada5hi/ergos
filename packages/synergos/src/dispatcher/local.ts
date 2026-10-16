@@ -42,7 +42,6 @@ export class LocalDispatcher<
 
         return {
             correlationId: correlated.correlationId,
-            delivered: true,
             replies,
         };
     }

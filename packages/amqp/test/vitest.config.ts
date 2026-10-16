@@ -4,7 +4,10 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
     resolve: {
         // the core's source, not its dist: no build needed before testing
-        alias: { synergos: fileURLToPath(new URL('../../synergos/src/index.ts', import.meta.url)) },
+        alias: [
+            { find: /^synergos$/, replacement: fileURLToPath(new URL('../../synergos/src/index.ts', import.meta.url)) },
+            { find: /^@synergos\/test$/, replacement: fileURLToPath(new URL('../../test/src/index.ts', import.meta.url)) },
+        ],
     },
     test: {
         include: ['test/unit/**/*.{test,spec}.{js,ts}'],
