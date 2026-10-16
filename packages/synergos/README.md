@@ -314,12 +314,13 @@ const dispatcher: IDispatcher<BuilderEvents> = messageBus
 
 `delivered` tells whether the bus accepted the command. It is always `true` for a
 `LocalDispatcher`; a `RemoteDispatcher` resolves `false` when no consumer matched (memory driver),
-so an application can run the command in-process instead:
+so an application can run the command in-process instead. Pass the `correlationId` on, so the
+replies still match the original dispatch:
 
 ```typescript
 const result = await remote.dispatch('build', { id: '1' });
 if (!result.delivered) {
-    await local.dispatch('build', { id: '1' });
+    await local.dispatch('build', { id: '1' }, { correlationId: result.correlationId });
 }
 ```
 
