@@ -1,9 +1,68 @@
-# @synergos/amqp
+<p align="center">
+    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/logo-amqp.svg" alt="@synergos/amqp" width="128" height="128" />
+</p>
 
-[![npm version](https://badge.fury.io/js/@synergos%2Famqp.svg)](https://npmjs.com/package/@synergos/amqp)
+<h1 align="center">@synergos/amqp</h1>
 
-Maps the [synergos](https://npmjs.com/package/synergos) message bus onto RabbitMQ through
-[amqp-extension](https://www.npmjs.com/package/amqp-extension).
+<p align="center">
+    <b>Run the synergos message bus over RabbitMQ.</b><br>
+    Work queues with retries and backoff, topic exchanges for pub/sub, and typed hooks<br>
+    for every message that is retried, dropped or malformed. Built on <a href="https://www.npmjs.com/package/amqp-extension">amqp-extension</a>.
+</p>
+
+<p align="center">
+    <a href="https://npmjs.com/package/@synergos/amqp"><img src="https://badge.fury.io/js/@synergos%2Famqp.svg" alt="npm version" /></a>
+    <a href="https://github.com/tada5hi/synergos/actions/workflows/main.yml"><img src="https://github.com/tada5hi/synergos/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
+    <a href="https://codecov.io/gh/tada5hi/synergos"><img src="https://codecov.io/gh/tada5hi/synergos/branch/master/graph/badge.svg?token=4KNSG8L13V" alt="codecov" /></a>
+    <a href="https://conventionalcommits.org"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits" /></a>
+</p>
+
+<p align="center">
+    <a href="#installation"><b>Installation</b></a>
+    ·
+    <a href="#usage">Usage</a>
+    ·
+    <a href="#routing">Routing</a>
+    ·
+    <a href="#retries">Retries</a>
+    ·
+    <a href="#options">Options</a>
+    ·
+    <a href="#hooks">Hooks</a>
+    ·
+    <a href="#notes">Notes</a>
+</p>
+
+---
+
+## Why @synergos/amqp?
+
+[synergos](https://npmjs.com/package/synergos) components never see a transport: they get
+`(data, context)` and a `MessageBus` routes commands and replies between them. In tests,
+`MemoryMessageBusDriver` does the routing in-process. In production you want the messages to
+survive a restart, failed handlers to be retried, and several replicas to share the work. This
+driver maps the bus onto RabbitMQ so that none of the component code changes:
+
+| Concern | Hand-written amqplib consumer | `AmqpMessageBusDriver` |
+|---|---|---|
+| **Topology** | Assert an exchange and a queue per routing, on both sides, identically | Derived from the `MessageRouting`, the same way for publisher and consumer |
+| **Retries** | `nack` and requeue, which retries immediately and forever | Re-published after an exponential backoff, with the attempt in an `x-attempt` header, dropped after `maxAttempts` |
+| **Duplicates** | A redelivery after a reset runs the handler a second time next to the first | A redelivery of a message still in flight on this consumer waits for the original |
+| **Garbage** | `JSON.parse` throws inside the consumer | Non-JSON or non-message deliveries are acked and reported to `onMalformed` |
+| **Ordering** | Single active consumer, configured by hand on every declaration | `ordered: true` on the routing |
+| **Reconnects** | Rebuild connection, channels and topology yourself | Handled by amqp-extension, topology is replayed on reconnect |
+| **Observability** | `console.log` in the consumer | `onRetry`, `onDrop` and `onMalformed` hooks |
+
+**Table of Contents**
+- [Installation](#installation)
+- [Usage](#usage)
+- [Routing](#routing)
+- [Retries](#retries)
+- [Options](#options)
+- [Hooks](#hooks)
+- [API](#api)
+- [Notes](#notes)
+- [License](#license)
 
 ## Installation
 
@@ -11,63 +70,123 @@ Maps the [synergos](https://npmjs.com/package/synergos) message bus onto RabbitM
 npm install synergos @synergos/amqp --save
 ```
 
+`synergos` is a peer dependency. The package is ESM-only and requires Node.js `>=22`.
+
 ## Usage
 
-```ts
-import { MessageBus } from 'synergos';
+Pass the driver to a `MessageBus`. Everything built on that bus (`DispatchCaller`, `WorkerCaller`,
+`consume()`) now goes through RabbitMQ:
+
+```typescript
+import { MessageBus, WorkerCaller } from 'synergos';
 import { AmqpMessageBusDriver } from '@synergos/amqp';
 
-const messageBus = new MessageBus({
-    driver: new AmqpMessageBusDriver({
-        connectionString: 'amqp://localhost',
-        defaultTopicExchange: 'app', // exchange of a pubSub routing without namespace
-        hooks: {
-            onRetry: ({ message, routing, attempt }) => logger.warn(`Retrying ${message.type} in ${routing.key} (attempt ${attempt})`),
-            onDrop: ({ message, routing }) => logger.error(`Dropping ${message.type} in ${routing.key}`),
-            onMalformed: ({ routing }) => logger.warn(`Dropping a malformed message in ${routing.key}`),
-        },
-    }),
+const driver = new AmqpMessageBusDriver({
+    connectionString: 'amqp://<user>:<password>@<host>',
+    defaultTopicExchange: 'app', // exchange for pubSub routings without a namespace
+    hooks: {
+        onRetry: ({ message, routing, attempt }) => logger.warn(`retrying ${message.type} in ${routing.key} (attempt ${attempt})`),
+        onDrop: ({ message, routing, error }) => logger.error(`dropping ${message.type} in ${routing.key}`, error),
+        onMalformed: ({ routing }) => logger.warn(`dropping a malformed delivery in ${routing.key}`),
+    },
 });
+
+const messageBus = new MessageBus({ driver });
+
+const worker = new WorkerCaller(new Builder(), {
+    consumeRouting: { type: 'work', key: 'builder' },
+    publishRouting: { type: 'work', key: 'builder-events' },
+    messageBus,
+});
+await worker.start();
+
+// on shutdown
+await worker.stop();
+await driver.close();
 ```
 
-| Routing | Exchange | Persistent | Retried |
-|---|---|---|---|
-| `work` | default (direct), or `namespace` | yes | yes |
-| `work` + `ordered` | as `work`, queue with `x-single-active-consumer` | yes | yes |
-| `pubSub` | topic `namespace`, else `defaultTopicExchange` | no | no |
+The connection opens on first use, not in the constructor. To share a connection with other code,
+pass an amqp-extension `Client` as `client` instead of `connectionString`.
 
-Options: `maxAttempts` (default 5), `retryDelay` (backoff base in ms, default 1000, capped at
-30s), `prefetchCount` (default 1), `hooks`, or `client` (an amqp-extension `Client`) in place of
-`connectionString`. The connection opens on first use; `close()` closes it.
+## Routing
+
+Each `MessageRouting` maps onto an exchange and a queue:
+
+| Routing | Exchange | Queue | Persistent | Retried |
+|---|---|---|---|---|
+| `{ type: 'work', key }` | Default (direct) exchange | Durable queue named `key`, shared by all consumers | yes | yes |
+| `{ type: 'work', key, ordered: true }` | Default (direct) exchange | As above, with `x-single-active-consumer` | yes | yes |
+| `{ type: 'work', key, namespace }` | Direct exchange `namespace` | Exclusive temporary queue per consumer, bound to `key` | yes | yes |
+| `{ type: 'pubSub', key }` | Topic exchange `namespace`, else `defaultTopicExchange` | Exclusive temporary queue per consumer, bound to `key` | no | no |
+
+A message's `metadata.persistent` overrides the persistence of its routing. Only a `work` routing
+without a `namespace` keeps messages while no consumer is connected and splits them between
+replicas.
+
+`publish()` resolves `true` once the broker has confirmed the message, and rejects when it refuses
+it.
+
+## Retries
+
+<p align="center">
+    <img src="https://raw.githubusercontent.com/tada5hi/synergos/master/.github/assets/amqp-retry.svg" alt="A work message that throws is re-published after a backoff until maxAttempts, then dropped; malformed deliveries are acked" width="100%" />
+</p>
+
+When a `work` handler throws, the error first reaches `MessageBus`' `onError` hook. amqp-extension
+then re-publishes the message with `x-attempt` incremented, after an exponential backoff starting
+at `retryDelay` and capped at 30 seconds, and reports it to `onRetry`. Once `maxAttempts` is
+reached the message is acked and reported to `onDrop`. There is no dead-letter queue.
+
+If the re-publish itself fails, the message is requeued and comes back as a redelivery.
+
+## Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `connectionString` | `string` | | AMQP URL. Either this or `client` |
+| `client` | `IAmqpClient` | | An amqp-extension `Client` (or anything with the same `of` / `publish` / `consume` / `close`) |
+| `defaultTopicExchange` | `string` | required | Topic exchange for `pubSub` routings without a `namespace` |
+| `maxAttempts` | `number` | `5` | Delivery attempts of a `work` message before it is dropped |
+| `retryDelay` | `number` | `1000` | Base of the exponential backoff in ms, capped at 30 s |
+| `prefetchCount` | `number` | `1` | Unacked messages per consumer. Keep `1` for handlers that read-modify-write the same rows |
+| `hooks` | `AmqpMessageBusDriverHooks` | | See [Hooks](#hooks) |
 
 ## Hooks
 
 | Hook | Called with | When |
 |---|---|---|
-| `onRetry` | `{ message, routing, attempt, error }` | a `work` handler threw; the message is re-published (or requeued if that failed) |
-| `onDrop` | `{ message, routing, attempt, error }` | a `work` message was dropped (acked) after `maxAttempts`; `error` is the last handler error |
-| `onMalformed` | `{ routing, content, error? }` | a delivery is not JSON (`error` is the parse error) or not a message; it is acked |
+| `onRetry` | `{ message, routing, attempt, error }` | A `work` handler threw and the message was re-published (or requeued, if that failed) |
+| `onDrop` | `{ message, routing, attempt, error }` | A `work` message was acked and dropped after `maxAttempts`. `error` is the last handler error |
+| `onMalformed` | `{ routing, content, error? }` | A delivery is not JSON (`error` is the parse error) or not a bus message. It is acked |
 
-`attempt` is the attempt that failed (1-based). A hook that throws is ignored (see `invokeHook`
-in synergos): it never changes how a message is settled.
+`attempt` is the attempt that failed, 1-based. A hook that throws is ignored (see `invokeHook` in
+synergos): it never changes how a message is settled.
 
-## Semantics
+## API
 
-- A `work` handler that throws is re-published by amqp-extension with the attempt in the
-  `x-attempt` header, after an exponential backoff, and dropped once `maxAttempts` is reached.
-  There is no dead-letter queue.
-- A redelivery (consumer crash, connection reset) of a message this consumer is still handling
-  is not run twice (the copy is held until the original settles); one that is not in flight
-  counts as a failed attempt. That guard is per consumer — a redelivery that lands on another
-  process runs again. **At-least-once**: a crash between the retry and the ack duplicates a
-  message.
-- A message that is not JSON or not a bus message is reported to `onMalformed` and dropped (acked).
-- `pubSub` consumers use an exclusive temporary queue: messages published while none is
-  connected are lost.
+| Export | Kind | Purpose |
+|---|---|---|
+| `AmqpMessageBusDriver` | class | `IMessageBusDriver` over amqp-extension: `publish()`, `consume()`, `close()` |
+| `AmqpMessageBusDriverOptions` | type | Constructor options, see [Options](#options) |
+| `AmqpMessageBusDriverHooks` | type | `onRetry`, `onDrop`, `onMalformed` |
+| `AmqpFailedMessage`, `AmqpMalformedMessage` | type | Hook arguments |
+| `IAmqpClient` | type | The part of amqp-extension's `Client` the driver uses |
 
-The JSON body and AMQP properties are byte-compatible with FLAME Hub's former driver; only the
-retry counter moved from the body (`metadata.attempt`) to the `x-attempt` header.
+## Notes
+
+- **Delivery is at-least-once.** A crash between a retry and its ack duplicates the message, and the
+  redelivery guard is per consumer: a redelivery that lands on another process runs again. Make
+  handlers idempotent.
+- **A redelivery that is not in flight counts as a failed attempt**, e.g. after the consumer
+  crashed mid-handler.
+- **`pubSub` messages published while no consumer is connected are lost.** Each consumer has its
+  own exclusive temporary queue.
+- **Wire compatibility:** the JSON body and AMQP properties are byte-compatible with FLAME Hub's
+  former driver. Only the retry counter moved, from the body (`metadata.attempt`) to the
+  `x-attempt` header.
 
 ## License
+
+Made with 💚
 
 Published under [MIT License](./LICENSE).

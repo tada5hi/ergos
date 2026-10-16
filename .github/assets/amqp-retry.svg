@@ -1,0 +1,122 @@
+<svg width="960" height="330" viewBox="0 0 960 330" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="rt-title rt-desc">
+    <title id="rt-title">What the AMQP driver does with a work message</title>
+    <desc id="rt-desc">A work message is published persistently to a queue and handed to the handler. When the handler resolves, the message is acked. When it throws and attempts remain, it is re-published after an exponential backoff with the x-attempt header incremented, reported to onRetry. After maxAttempts it is acked and dropped, reported to onDrop. A delivery that is not a message is acked and reported to onMalformed.</desc>
+
+    <style>
+        :root {
+            --fg: #1F2328;
+            --muted: #59636E;
+            --panel: #F6F8FA;
+            --panel-edge: #D1D9E0;
+            --card: #FFFFFF;
+            --rail: #8C959F;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --fg: #F0F6FC;
+                --muted: #9198A1;
+                --panel: #151B23;
+                --panel-edge: #3D444D;
+                --card: #0D1117;
+                --rail: #656C76;
+            }
+        }
+        text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: var(--fg); }
+        .muted { fill: var(--muted); }
+        .code { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; }
+        .title { font-size: 15px; font-weight: 600; }
+        .panel { fill: var(--panel); stroke: var(--panel-edge); }
+        .card { fill: var(--card); }
+        .rail { stroke: var(--rail); }
+        .hook { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    </style>
+
+    <defs>
+        <marker id="rt-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 Z" fill="#8C959F"/>
+        </marker>
+        <marker id="rt-head-orange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 Z" fill="#F97316"/>
+        </marker>
+    </defs>
+
+    <!-- happy path -->
+    <rect class="card" x="16" y="40" width="180" height="76" rx="14" stroke="#8B5CF6" stroke-width="1.5"/>
+    <text class="title" x="34" y="70">publish</text>
+    <text class="code muted" x="34" y="96" font-size="12">work · builder</text>
+
+    <path class="rail" d="M196 78 H232" stroke-width="2" marker-end="url(#rt-head)"/>
+
+    <rect class="card" x="236" y="40" width="180" height="76" rx="14" stroke="#F97316" stroke-width="1.5"/>
+    <text class="title" x="254" y="70">queue</text>
+    <text class="muted" x="254" y="96" font-size="12">durable · persistent</text>
+    <g fill="#F97316">
+        <rect x="360" y="58" width="10" height="16" rx="3" fill-opacity="0.4"/>
+        <rect x="376" y="58" width="10" height="16" rx="3" fill-opacity="0.7"/>
+        <rect x="392" y="58" width="10" height="16" rx="3"/>
+    </g>
+
+    <path class="rail" d="M416 78 H452" stroke-width="2" marker-end="url(#rt-head)"/>
+
+    <rect class="card" x="456" y="40" width="180" height="76" rx="14" stroke="#14B8A6" stroke-width="1.5"/>
+    <text class="title" x="474" y="70">handler</text>
+    <text class="muted" x="474" y="96" font-size="12">prefetchCount: 1</text>
+
+    <path class="rail" d="M636 78 H672" stroke-width="2" marker-end="url(#rt-head)"/>
+    <text class="muted" x="654" y="68" font-size="11" text-anchor="middle">ok</text>
+
+    <rect x="676" y="40" width="120" height="76" rx="14" fill="#22C55E" fill-opacity="0.14" stroke="#22C55E" stroke-width="1.5"/>
+    <text class="title" x="736" y="84" text-anchor="middle">ack</text>
+
+    <!-- malformed deliveries never reach the handler -->
+    <rect class="panel" x="816" y="40" width="128" height="190" rx="14" stroke-dasharray="5 5"/>
+    <text class="muted" x="880" y="70" font-size="12" text-anchor="middle">not JSON or</text>
+    <text class="muted" x="880" y="88" font-size="12" text-anchor="middle">not a message</text>
+    <path class="rail" d="M880 100 V126" stroke-width="2" marker-end="url(#rt-head)"/>
+    <text class="title" x="880" y="152" text-anchor="middle">ack</text>
+    <rect x="832" y="174" width="96" height="22" rx="11" fill="#8C959F" fill-opacity="0.18"/>
+    <text class="hook" x="880" y="189" text-anchor="middle">onMalformed</text>
+
+    <!-- the handler threw -->
+    <path class="rail" d="M546 116 V178" stroke-width="2" marker-end="url(#rt-head)"/>
+    <text class="muted" x="536" y="148" font-size="11" text-anchor="end">throws</text>
+    <rect x="566" y="134" width="70" height="20" rx="10" fill="#6366F1" fill-opacity="0.16"/>
+    <text class="hook" x="601" y="148" text-anchor="middle">onError</text>
+
+    <rect class="card" x="456" y="182" width="180" height="76" rx="14" stroke="#8C959F" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text class="title" x="474" y="212">attempts left?</text>
+    <text class="code muted" x="474" y="238" font-size="12">maxAttempts: 5</text>
+
+    <!-- yes: back off and re-publish -->
+    <path d="M456 220 H420" stroke="#F97316" stroke-width="2" marker-end="url(#rt-head-orange)"/>
+    <text class="muted" x="438" y="210" font-size="11" text-anchor="middle">yes</text>
+
+    <rect class="card" x="236" y="182" width="180" height="76" rx="14" stroke="#F97316" stroke-width="1.5"/>
+    <text class="title" x="254" y="212">back off</text>
+    <text class="code muted" x="254" y="238" font-size="12">x-attempt + 1</text>
+    <rect x="236" y="268" width="80" height="22" rx="11" fill="#F97316" fill-opacity="0.18"/>
+    <text class="hook" x="276" y="283" text-anchor="middle">onRetry</text>
+
+    <path d="M326 182 V120" stroke="#F97316" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#rt-head-orange)"/>
+    <text x="334" y="156" font-size="11" style="fill:#F97316">re-publish</text>
+
+    <g>
+        <circle r="8" fill="#F97316" fill-opacity="0.25"/>
+        <circle r="4" fill="#F97316"/>
+        <animateMotion dur="4s" repeatCount="indefinite" path="M546 116 V182 M456 220 H326 V120"/>
+        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.9;1" dur="4s" repeatCount="indefinite"/>
+    </g>
+
+    <!-- no: drop -->
+    <path class="rail" d="M636 220 H672" stroke-width="2" marker-end="url(#rt-head)"/>
+    <text class="muted" x="654" y="210" font-size="11" text-anchor="middle">no</text>
+
+    <rect x="676" y="182" width="120" height="76" rx="14" fill="#F43F5E" fill-opacity="0.12" stroke="#F43F5E" stroke-width="1.5"/>
+    <text class="title" x="736" y="212" text-anchor="middle">drop</text>
+    <text class="muted" x="736" y="238" font-size="12" text-anchor="middle">acked</text>
+    <rect x="696" y="268" width="80" height="22" rx="11" fill="#F43F5E" fill-opacity="0.18"/>
+    <text class="hook" x="736" y="283" text-anchor="middle">onDrop</text>
+
+    <!-- footnote -->
+    <text class="muted" x="16" y="318" font-size="12">Backoff is exponential from <tspan class="code">retryDelay</tspan> (1 s), capped at 30 s. <tspan class="code">pubSub</tspan> routings use an exclusive temporary queue and are never retried.</text>
+</svg>

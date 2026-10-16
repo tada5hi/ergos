@@ -32,7 +32,9 @@ synergos/
 │       │   └── vitest.config.ts         # aliases `synergos` to ../synergos/src (no build needed)
 │       └── package.json, README.md, LICENSE, tsconfig*.json, tsdown.config.ts
 ├── .github/
-│   ├── assets/logo.svg                  # README header logo
+│   ├── assets/                          # README graphics, referenced by absolute raw.githubusercontent URLs from the package READMEs (npm)
+│   │   ├── logo.svg, logo-amqp.svg      # header logos (synergos, @synergos/amqp)
+│   │   └── architecture.svg, component.svg, amqp-retry.svg  # diagrams; light/dark via prefers-color-scheme
 │   ├── actions/install/action.yml       # setup-node + cache (node_modules, packages/*/node_modules) + npm ci
 │   ├── actions/build/action.yml         # cache **/dist by SHA + npm run build
 │   ├── workflows/main.yml               # CI: install -> build -> (lint, typecheck, test)

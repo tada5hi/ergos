@@ -1,0 +1,97 @@
+<svg width="960" height="310" viewBox="0 0 960 310" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="co-title co-desc">
+    <title id="co-title">How a Component resolves a key</title>
+    <desc id="co-desc">handle(key) runs the handler mounted for the key, else the '*' fallback, else the caller's options.handle, where a reply leaves the component, else it resolves without error. context.handle inside a handler runs the same resolution again with the parent's metadata merged in.</desc>
+
+    <style>
+        :root {
+            --fg: #1F2328;
+            --muted: #59636E;
+            --panel: #F6F8FA;
+            --panel-edge: #D1D9E0;
+            --card: #FFFFFF;
+            --rail: #8C959F;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --fg: #F0F6FC;
+                --muted: #9198A1;
+                --panel: #151B23;
+                --panel-edge: #3D444D;
+                --card: #0D1117;
+                --rail: #656C76;
+            }
+        }
+        text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: var(--fg); }
+        .muted { fill: var(--muted); }
+        .code { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; }
+        .title { font-size: 15px; font-weight: 600; }
+        .panel { fill: var(--panel); stroke: var(--panel-edge); }
+        .card { fill: var(--card); }
+        .rail { stroke: var(--rail); }
+        .num { font-size: 12px; font-weight: 700; fill: #FFFFFF; }
+    </style>
+
+    <defs>
+        <marker id="co-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 Z" fill="#8C959F"/>
+        </marker>
+        <linearGradient id="co-entry" x1="16" y1="86" x2="216" y2="174" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#8B5CF6" stop-opacity="0.16"/>
+            <stop offset="1" stop-color="#6366F1" stop-opacity="0.16"/>
+        </linearGradient>
+    </defs>
+
+    <!-- entry -->
+    <rect x="16" y="86" width="200" height="88" rx="14" fill="url(#co-entry)" stroke="#8B5CF6" stroke-width="1.5"/>
+    <text class="title" x="34" y="120">component.handle()</text>
+    <text class="code muted" x="34" y="146" font-size="12">key, data,</text>
+    <text class="code muted" x="34" y="164" font-size="12">metadata?, options?</text>
+
+    <!-- the rail: try each step in order -->
+    <path class="rail" d="M216 130 H250" stroke-width="2"/>
+    <path class="rail" d="M250 46 V214" stroke-width="2"/>
+    <path class="rail" d="M250 46 H266" stroke-width="2" marker-end="url(#co-head)"/>
+    <path class="rail" d="M250 102 H266" stroke-width="2" marker-end="url(#co-head)"/>
+    <path class="rail" d="M250 158 H266" stroke-width="2" marker-end="url(#co-head)"/>
+    <path class="rail" d="M250 214 H266" stroke-width="2" marker-end="url(#co-head)"/>
+    <text class="muted" x="258" y="78" font-size="11">else</text>
+    <text class="muted" x="258" y="134" font-size="11">else</text>
+    <text class="muted" x="258" y="190" font-size="11">else</text>
+
+    <!-- 1: the mounted handler -->
+    <rect class="card" x="290" y="26" width="270" height="40" rx="12" stroke="#8B5CF6" stroke-opacity="0.7"/>
+    <circle cx="312" cy="46" r="10" fill="#8B5CF6"/>
+    <text class="num" x="312" y="50" text-anchor="middle">1</text>
+    <text class="code" x="332" y="50" font-size="12.5">mount(key, handler)</text>
+    <path class="rail" d="M560 46 H600" stroke-width="2" marker-end="url(#co-head)"/>
+    <text x="610" y="51" font-size="13.5">runs the handler mounted for the key</text>
+
+    <!-- 2: the fallback -->
+    <rect class="card" x="290" y="82" width="270" height="40" rx="12" stroke="#6366F1" stroke-opacity="0.7"/>
+    <circle cx="312" cy="102" r="10" fill="#6366F1"/>
+    <text class="num" x="312" y="106" text-anchor="middle">2</text>
+    <text class="code" x="332" y="106" font-size="12.5">mount('*', handler)</text>
+    <path class="rail" d="M560 102 H600" stroke-width="2" marker-end="url(#co-head)"/>
+    <text x="610" y="107" font-size="13.5">runs the fallback for every other key</text>
+
+    <!-- 3: the caller's sink, where replies leave -->
+    <rect class="card" x="290" y="138" width="270" height="40" rx="12" stroke="#14B8A6" stroke-opacity="0.8"/>
+    <circle cx="312" cy="158" r="10" fill="#14B8A6"/>
+    <text class="num" x="312" y="162" text-anchor="middle">3</text>
+    <text class="code" x="332" y="162" font-size="12.5">options.handle</text>
+    <path class="rail" d="M560 158 H600" stroke-width="2" marker-end="url(#co-head)"/>
+    <text x="610" y="163" font-size="13.5">a <tspan font-weight="600" style="fill:#14B8A6">reply</tspan>: the event leaves the component</text>
+
+    <!-- 4: nothing matched -->
+    <rect class="card" x="290" y="194" width="270" height="40" rx="12" stroke="#8C959F" stroke-opacity="0.7" stroke-dasharray="4 4"/>
+    <circle cx="312" cy="214" r="10" fill="#8C959F"/>
+    <text class="num" x="312" y="218" text-anchor="middle">4</text>
+    <text class="code muted" x="332" y="218" font-size="12.5">no handler</text>
+    <path class="rail" d="M560 214 H600" stroke-width="2" marker-end="url(#co-head)"/>
+    <text class="muted" x="610" y="219" font-size="13.5">resolves without error</text>
+
+    <!-- child events -->
+    <rect class="panel" x="16" y="254" width="928" height="44" rx="14" stroke-dasharray="5 5"/>
+    <text class="code" x="34" y="281" font-size="12.5" style="fill:#8B5CF6">context.handle(key, data)</text>
+    <text class="muted" x="238" y="281" font-size="13">inside a handler runs this same resolution again, with the parent's metadata merged in.</text>
+</svg>
