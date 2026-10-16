@@ -27,12 +27,20 @@ describe('src/dispatcher/remote', () => {
         expect(message?.metadata).toMatchObject({ correlationId: result.correlationId });
     });
 
-    it('should keep a given correlationId and persistent', async () => {
+    it('should keep a given correlationId, persistent and expiresAt', async () => {
         const messageBus = new FakeMessageBus();
         await new RemoteDispatcher<TestEventMap>({ messageBus, routing })
-            .dispatch('execute', { id: 'a' }, { correlationId: 'c', persistent: false });
+            .dispatch('execute', { id: 'a' }, {
+                correlationId: 'c',
+                persistent: false,
+                expiresAt: 5,
+            });
 
-        expect(messageBus.published[0]?.metadata).toMatchObject({ correlationId: 'c', persistent: false });
+        expect(messageBus.published[0]?.metadata).toMatchObject({
+            correlationId: 'c',
+            persistent: false,
+            expiresAt: 5,
+        });
     });
 
     it('should generate a correlationId for an empty one', async () => {

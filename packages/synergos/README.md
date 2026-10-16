@@ -210,9 +210,13 @@ await messageBus.publish(buildMessage({
 }));
 ```
 
-A message is `{ id, type, data, metadata: { timestamp, routing, persistent?, delivery? } }`. `buildMessage()`
+A message is `{ id, type, data, metadata: { timestamp, routing, persistent?, expiresAt?, delivery? } }`. `buildMessage()`
 fills in the `id` and `timestamp`, `isMessage()` checks the shape, and `serializeMessage()` writes
 JSON that keeps `Error`s as `{ name, message, code? }`.
+
+`expiresAt` (epoch ms) makes a message expire: one consumed after it is settled (acked) without
+running a handler and reported to `onExpired`, also when it was retried or requeued. Pass it per
+dispatch, e.g. `dispatcher.dispatch('check', data, { expiresAt: Date.now() + 60_000 })`.
 
 ### Routing
 
@@ -374,10 +378,10 @@ next one. Dispatchers and workers treat both kinds the same.
 
 A `RemoteWorker` passes an inbound command's metadata to the component unchanged, including the
 driver's `delivery`. The events it publishes keep the rest of the metadata (such as the
-`correlationId`) but drop the command's `delivery`, `timestamp`, `persistent` and `routing`.
+`correlationId`) but drop the command's `delivery`, `timestamp`, `persistent`, `expiresAt` and `routing`.
 Likewise, a `RemoteDispatcher` never sends a caller's `delivery`, `timestamp` or `routing`, so
 dispatching with an inbound `context.metadata` (to keep the `correlationId`) starts a fresh command;
-only a `persistent` the caller passes is kept. A `LocalDispatcher` hands the metadata to the
+only a `persistent` or `expiresAt` the caller passes is kept. A `LocalDispatcher` hands the metadata to the
 component as given.
 
 A forwarded event whose publish *rejects* fails the command like a throwing handler: over AMQP the
@@ -402,7 +406,7 @@ for (const reply of replies) {
 }
 ```
 
-Unlike a `RemoteWorker`, a `RemoteDispatcher` keeps a `persistent` flag present in that metadata.
+Unlike a `RemoteWorker`, a `RemoteDispatcher` keeps a `persistent` flag or `expiresAt` present in that metadata.
 
 ### Testing a handler
 
@@ -474,6 +478,7 @@ to your logger, metrics or tracing:
 | `MessageBus` | `onPublish(message)` | Before a message is handed to the driver |
 | | `onConsume(message, routing)` | A message arrived, before dispatch |
 | | `onUnhandled(message, routing)` | No handler (and no `'*'`) accepted it. It is acked |
+| | `onExpired(message, routing)` | Its `metadata.expiresAt` had passed. It is acked without a handler |
 | | `onError(error, message, routing)` | A handler threw. The error is rethrown to the driver afterwards |
 | `RemoteWorker` | `onUnrouted(event)` | A forwarded event was dropped because no `publish` routing is set |
 | `defineScheduledComponent` | `onError(error)` | A pass failed |

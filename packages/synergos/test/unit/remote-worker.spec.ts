@@ -98,6 +98,7 @@ describe('src/worker/module', () => {
             timestamp: 1,
             delivery: { attempt: 5, maxAttempts: 5 } satisfies MessageDelivery,
             persistent: true,
+            expiresAt: Date.now() + 60_000,
             correlationId: 'c',
             routing: commands,
         };
@@ -116,6 +117,7 @@ describe('src/worker/module', () => {
         expect(metadata).toMatchObject({ correlationId: 'c', routing: replies });
         expect(metadata).not.toHaveProperty('delivery');
         expect(metadata).not.toHaveProperty('persistent');
+        expect(metadata).not.toHaveProperty('expiresAt');
         expect(metadata?.timestamp).toBeGreaterThanOrEqual(before);
     });
 

@@ -297,6 +297,26 @@ describe('src/module', () => {
         expect(client.publishes[0]?.options.persistent).toBe(false);
     });
 
+    it('should map expiresAt to the expiration property (remaining ms, never negative)', async () => {
+        const client = new FakeAmqpClient();
+        const driver = createDriver(client);
+        const later = message(shapes.work);
+        later.metadata.expiresAt = Date.now() + 60_000;
+        const past = message(shapes.work);
+        past.metadata.expiresAt = 0;
+
+        await driver.publish(shapes.work, later);
+        await driver.publish(shapes.work, past);
+        await driver.publish(shapes.work, message(shapes.work));
+
+        const [first, second, third] = client.publishes.map((entry) => entry.options.expiration);
+        expect(Number(first)).toBeGreaterThan(59_000);
+        expect(Number(first)).toBeLessThanOrEqual(60_000);
+        expect(first).toBeTypeOf('string');
+        expect(second).toBe('0');
+        expect(third).toBeUndefined();
+    });
+
     it('should create a client lazily from a connection string', async () => {
         const driver = new AmqpMessageBusDriver({ connectionString: 'amqp://unused', defaultTopicExchange: 'FLAME' });
 

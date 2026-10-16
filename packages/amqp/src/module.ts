@@ -70,6 +70,10 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
             type: message.type,
             messageId: message.id,
             persistent: message.metadata.persistent ?? routing.type === MessageRoutingType.WORK,
+            // per-message TTL: the broker drops it; MessageBus drops one that still arrives late
+            ...(message.metadata.expiresAt === undefined ?
+                {} :
+                { expiration: String(Math.max(0, message.metadata.expiresAt - Date.now())) }),
             ...this.resolveQueueOptions(routing),
         });
     }

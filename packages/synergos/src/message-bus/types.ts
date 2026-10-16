@@ -16,6 +16,11 @@ export type MessageRouting = {
 export type MessageMetadata = {
     timestamp: number,
     persistent?: boolean,
+    /**
+     * Epoch ms after which the message is settled (acked) unhandled and
+     * reported to onExpired. amqp also hands it to the broker as expiration.
+     */
+    expiresAt?: number,
     routing: MessageRouting,
     /**
      * Set by every driver on consume, never published: lets a handler tell
@@ -91,6 +96,10 @@ export type MessageBusHooks = {
      * No handler (and no '*') accepted the message; it is settled (acked) without error.
      */
     onUnhandled?(message: Message, routing: MessageRouting): void,
+    /**
+     * metadata.expiresAt had passed on consume; the message is settled (acked) without a handler.
+     */
+    onExpired?(message: Message, routing: MessageRouting): void,
     /**
      * The handler threw; the error is rethrown afterwards (amqp retries or drops it, memory drops it).
      */

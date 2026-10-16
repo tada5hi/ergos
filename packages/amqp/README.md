@@ -119,7 +119,9 @@ Each `MessageRouting` maps onto an exchange and a queue:
 | `{ type: 'work', key, namespace }` | Direct exchange `namespace` | Exclusive temporary queue per consumer, bound to `key` | yes | yes |
 | `{ type: 'pubSub', key }` | Topic exchange `namespace`, else `defaultTopicExchange` | Exclusive temporary queue per consumer, bound to `key` | no | no |
 
-A message's `metadata.persistent` overrides the persistence of its routing. Only a `work` routing
+A message's `metadata.persistent` overrides the persistence of its routing. Its `metadata.expiresAt`
+becomes the AMQP `expiration` (the remaining ms), so the broker drops it unconsumed; one that still
+arrives late is dropped by `MessageBus` (`onExpired`). Only a `work` routing
 without a `namespace` keeps messages while no consumer is connected and splits them between
 replicas.
 

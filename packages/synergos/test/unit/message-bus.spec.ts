@@ -188,6 +188,29 @@ describe('src/message-bus', () => {
         ]);
     });
 
+    it('should settle an expired message without a handler, reporting it to onExpired', async () => {
+        const calls: [string, Message, MessageRouting][] = [];
+        const driver = new CaptureDriver();
+        const bus = new MessageBus({
+            driver,
+            hooks: {
+                onExpired: (message, from) => { calls.push(['expired', message, from]); },
+                onError: (_error, message, from) => { calls.push(['error', message, from]); },
+                onUnhandled: (message, from) => { calls.push(['unhandled', message, from]); },
+            },
+        });
+        const handled: string[] = [];
+        await bus.consumeAny(routing, (message) => { handled.push(message.id); });
+
+        const expired = buildMessage({ type: 'run', metadata: { routing, expiresAt: Date.now() - 1 } });
+        const fresh = buildMessage({ type: 'run', metadata: { routing, expiresAt: Date.now() + 60_000 } });
+        await expect(driver.deliver(expired)).resolves.toBeUndefined();
+        await driver.deliver(fresh);
+
+        expect(handled).toEqual([fresh.id]);
+        expect(calls).toEqual([['expired', expired, routing]]);
+    });
+
     it('should keep every outcome when a hook throws or rejects', async () => {
         const fail = () => { throw new Error('hook'); };
         const driver = new CaptureDriver();
@@ -198,6 +221,7 @@ describe('src/message-bus', () => {
                 onConsume: () => Promise.reject(new Error('hook')),
                 onUnhandled: fail,
                 onError: fail,
+                onExpired: fail,
             },
         });
         const handled: string[] = [];
@@ -216,5 +240,8 @@ describe('src/message-bus', () => {
         await expect(driver.deliver(buildMessage({ type: 'nope', metadata: { routing } }))).resolves.toBeUndefined();
         // the handler's own error, not the hook's
         await expect(driver.deliver(buildMessage({ type: 'boom', metadata: { routing } }))).rejects.toThrow('handler');
+        // still acked, without a handler, despite onExpired
+        await expect(driver.deliver(buildMessage({ type: 'run', metadata: { routing, expiresAt: 0 } }))).resolves.toBeUndefined();
+        expect(handled).toEqual(['run']);
     });
 });
