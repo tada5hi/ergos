@@ -57,6 +57,8 @@ describe('src/dispatcher/remote', () => {
         const inbound = {
             timestamp: 1,
             delivery: { attempt: 3, maxAttempts: 5 },
+            // a body counter from an older hub producer
+            attempt: 3,
             persistent: false,
             routing: { type: 'pubSub', key: 'other' } as MessageRouting,
             correlationId: 'c',
@@ -67,6 +69,7 @@ describe('src/dispatcher/remote', () => {
 
         const metadata = messageBus.published[0]?.metadata;
         expect(metadata).not.toHaveProperty('delivery');
+        expect(metadata).not.toHaveProperty('attempt');
         expect(metadata?.timestamp).toBeGreaterThanOrEqual(before);
         expect(metadata?.routing).toEqual(routing);
         expect(metadata).toMatchObject({ correlationId: 'c', persistent: false });

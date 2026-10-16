@@ -97,6 +97,8 @@ describe('src/worker/module', () => {
         const inbound = {
             timestamp: 1,
             delivery: { attempt: 5, maxAttempts: 5 } satisfies MessageDelivery,
+            // a body counter from an older hub producer
+            attempt: 5,
             persistent: true,
             expiresAt: Date.now() + 60_000,
             correlationId: 'c',
@@ -116,6 +118,7 @@ describe('src/worker/module', () => {
         const metadata = published[1]?.metadata;
         expect(metadata).toMatchObject({ correlationId: 'c', routing: replies });
         expect(metadata).not.toHaveProperty('delivery');
+        expect(metadata).not.toHaveProperty('attempt');
         expect(metadata).not.toHaveProperty('persistent');
         expect(metadata).not.toHaveProperty('expiresAt');
         expect(metadata?.timestamp).toBeGreaterThanOrEqual(before);
