@@ -74,7 +74,7 @@ on a consume path, where a propagated error would turn an ack into a retry.
 ## Key Dependencies
 
 - `synergos`: `node-cron` (scheduled components), its only runtime dependency. It never imports amqp-extension.
-- `@synergos/amqp`: `amqp-extension` (`^5.1.0`, dependency) and `synergos` (peer + dev, workspace version; release-please's node-workspace plugin bumps the range).
+- `@synergos/amqp`: `amqp-extension` (`^5.1.1`, dependency) and `synergos` (peer + dev, workspace version; release-please's node-workspace plugin bumps the range).
 
 ## Package Exports
 
