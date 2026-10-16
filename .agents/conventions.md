@@ -67,7 +67,8 @@ Commits follow **[Conventional Commits](https://www.conventionalcommits.org)** �
 [optional footer(s)]
 ```
 
-- `fix:` → patch bump. `feat:` → minor bump. `!` or a `BREAKING CHANGE:` footer → minor while pre-1.0 (`bump-minor-pre-major` is set), major afterwards.
+- The packages stay below 1.0.0 until the API is stable. While pre-1.0: `fix:` and `feat:` → patch bump (`bump-patch-for-minor-pre-major`), `!` or a `BREAKING CHANGE:` footer → minor bump (`bump-minor-pre-major`). The first release is `0.1.0` (`initial-version`).
+- Going 1.0: land a commit with a `Release-As: 1.0.0` footer. From then on `fix:` → patch, `feat:` → minor, breaking → major.
 - `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `test:` → no release.
 - Dependabot is configured to use `fix` for production deps and `build` for dev deps, with the scope included — match that when bumping dependencies by hand (e.g. `build(deps-dev): bump vitest to v4`).
 
@@ -90,7 +91,7 @@ Automated by `.github/workflows/release.yml` on every push to `master`:
 2. Merging that PR creates one git tag per released package (component-prefixed, e.g. `synergos-v0.1.0`, `amqp-v0.1.0`) and GitHub releases.
 3. On that same run, `releases_created == 'true'` gates checkout → install → build → **publish** via `tada5hi/monoship@v2`, which publishes every workspace package whose version is not yet on npm.
 
-Config lives in `release-please-config.json` (`release-type: node`, `bump-minor-pre-major: true`, `packages: { packages/synergos, packages/amqp }`). Releases are never cut by hand.
+Config lives in `release-please-config.json` (`release-type: node`, `bump-minor-pre-major: true`, `bump-patch-for-minor-pre-major: true`, `initial-version: 0.1.0`, `packages: { packages/synergos, packages/amqp }`). Releases are never cut by hand.
 
 ## CI/CD
 
