@@ -1,6 +1,6 @@
 {
     "name": "@synergos/amqp",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "type": "module",
     "description": "AMQP (RabbitMQ) driver for the synergos message bus, built on amqp-extension.",
     "author": {
@@ -50,9 +50,9 @@
         "amqp-extension": "^5.1.1"
     },
     "devDependencies": {
-        "synergos": "^0.0.0"
+        "synergos": "^0.1.0"
     },
     "peerDependencies": {
-        "synergos": "^0.0.0"
+        "synergos": "^0.1.0"
     }
 }
