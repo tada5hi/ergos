@@ -17,16 +17,20 @@ export type FakeAmqpConsume = {
     options: ConsumeOptions,
     handler: AmqpDeliveryHandler,
     cancelled: boolean,
+    inFlight: Set<Promise<void>>,
 };
 
 type FakeAmqpLog = {
     publishes: FakeAmqpPublish[],
     consumes: FakeAmqpConsume[],
-    closed: number,
+    loopback?: { index: number },
 };
 
 /**
  * Records what the driver hands amqp-extension; of() siblings share the log.
+ * FakeAmqpClient.loopback() also delivers each publish to the matching consumers:
+ * the default exchange round-robins (a queue), any other fans out (a queue per consumer).
+ * ponytail: no queue buffering, no retry; a handler error is dropped.
  */
 export class FakeAmqpClient implements IAmqpClient {
     protected exchange: Exchange;
@@ -38,15 +42,20 @@ export class FakeAmqpClient implements IAmqpClient {
         this.log = log ?? {
             publishes: [], 
             consumes: [], 
-            closed: 0, 
         };
+    }
+
+    static loopback(): FakeAmqpClient {
+        return new FakeAmqpClient(undefined, {
+            publishes: [],
+            consumes: [],
+            loopback: { index: 0 },
+        });
     }
 
     get publishes() { return this.log.publishes; }
 
     get consumes() { return this.log.consumes; }
-
-    get closed() { return this.log.closed; }
 
     of(exchange: Exchange): FakeAmqpClient {
         return new FakeAmqpClient(exchange, this.log);
@@ -59,6 +68,23 @@ export class FakeAmqpClient implements IAmqpClient {
             body, 
             options, 
         });
+
+        const { loopback } = this.log;
+        if (loopback) {
+            const matching = this.log.consumes.filter((entry) => !entry.cancelled &&
+                entry.key === key &&
+                entry.exchange.type === this.exchange.type &&
+                (entry.exchange.name || '') === (this.exchange.name || ''));
+            const targets = this.exchange.name ? matching : matching.slice(loopback.index++ % matching.length).slice(0, 1);
+            for (const entry of targets) {
+                const handled = Promise.resolve()
+                    .then(() => entry.handler({ content: Buffer.from(body), properties: {} }))
+                    .catch(() => {});
+                entry.inFlight.add(handled);
+                handled.then(() => entry.inFlight.delete(handled));
+            }
+        }
+
         return true;
     }
 
@@ -69,17 +95,17 @@ export class FakeAmqpClient implements IAmqpClient {
             options, 
             handler: handlers.$any, 
             cancelled: false, 
+            inFlight: new Set(),
         };
         this.log.consumes.push(entry);
 
         return {
             cancel: async () => {
                 entry.cancelled = true;
+                await Promise.all(entry.inFlight);
             },
         };
     }
 
-    async close() {
-        this.log.closed++;
-    }
+    close() { return Promise.resolve(); }
 }

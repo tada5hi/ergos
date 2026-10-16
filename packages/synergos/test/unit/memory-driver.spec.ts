@@ -1,41 +1,77 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryMessageBusDriver, buildMessage } from '../../src';
-import type { MessageRouting } from '../../src';
+import type { Message, MessageRouting } from '../../src';
+import { defineDriverConformance } from '../../src/conformance';
+import { drain } from './fakes/drain';
 
 const work: MessageRouting = { type: 'work', key: 'jobs' };
-const pubSub: MessageRouting = { type: 'pubSub', key: 'events' };
 
 const message = (routing: MessageRouting) => buildMessage({ type: 'run', metadata: { routing } });
 
 describe('src/message-bus/memory', () => {
-    it('should resolve false when no consumer matches', async () => {
+    defineDriverConformance({ describe, it }, () => new MemoryMessageBusDriver());
+
+    it('should keep a WORK message until a consumer arrives', async () => {
         const driver = new MemoryMessageBusDriver();
-        await driver.consume({ ...work, namespace: 'other' }, () => {});
-        await expect(driver.publish(work, message(work))).resolves.toBe(false);
+        const seen: Message[] = [];
+        const published = message(work);
+
+        await driver.publish(work, published);
+        await driver.consume(work, (received) => { seen.push(received); });
+        await drain();
+
+        expect(seen.map((received) => received.id)).toEqual([published.id]);
     });
 
-    it('should round-robin WORK messages', async () => {
+    it('should drop a message without consumer on a namespaced WORK or a PUB_SUB routing', async () => {
         const driver = new MemoryMessageBusDriver();
+        const seen: string[] = [];
+        const namespaced: MessageRouting = { ...work, namespace: 'tasks' };
+        const pubSub: MessageRouting = { type: 'pubSub', key: 'events' };
+
+        await driver.publish(namespaced, message(namespaced));
+        await driver.publish(pubSub, message(pubSub));
+        await driver.consume(namespaced, () => { seen.push('namespaced'); });
+        await driver.consume(pubSub, () => { seen.push('pubSub'); });
+        await drain();
+
+        expect(seen).toEqual([]);
+    });
+
+    it('should fan a namespaced WORK message out like amqp (an exclusive queue per consumer)', async () => {
+        const driver = new MemoryMessageBusDriver();
+        const seen: string[] = [];
+        const namespaced: MessageRouting = { ...work, namespace: 'tasks' };
+        await driver.consume(namespaced, () => { seen.push('a'); });
+        await driver.consume(namespaced, () => { seen.push('b'); });
+
+        await driver.publish(namespaced, message(namespaced));
+        await drain();
+
+        expect(seen).toEqual(['a', 'b']);
+    });
+
+    it('should round-robin WORK messages, and keep an ordered routing on one consumer', async () => {
+        const driver = new MemoryMessageBusDriver();
+        const ordered: MessageRouting = {
+            ...work, 
+            key: 'replies', 
+            ordered: true, 
+        };
         const seen: string[] = [];
         await driver.consume(work, () => { seen.push('a'); });
         await driver.consume(work, () => { seen.push('b'); });
+        await driver.consume(ordered, () => { seen.push('first'); });
+        await driver.consume(ordered, () => { seen.push('second'); });
 
         for (let i = 0; i < 4; i++) {
-            await expect(driver.publish(work, message(work))).resolves.toBe(true);
+            await driver.publish(work, message(work));
         }
+        await driver.publish(ordered, message(ordered));
+        await driver.publish(ordered, message(ordered));
+        await drain();
 
-        expect(seen).toEqual(['a', 'b', 'a', 'b']);
-    });
-
-    it('should fan out PUB_SUB messages', async () => {
-        const driver = new MemoryMessageBusDriver();
-        const seen: string[] = [];
-        await driver.consume(pubSub, () => { seen.push('a'); });
-        await driver.consume(pubSub, () => { seen.push('b'); });
-
-        await driver.publish(pubSub, message(pubSub));
-
-        expect(seen).toEqual(['a', 'b']);
+        expect(seen).toEqual(['a', 'b', 'a', 'b', 'first', 'first']);
     });
 
     it('should stop delivering to a cancelled consumer', async () => {
@@ -47,35 +83,21 @@ describe('src/message-bus/memory', () => {
         await a.cancel();
         await driver.publish(work, message(work));
         await driver.publish(work, message(work));
+        await drain();
 
         expect(seen).toEqual(['b', 'b']);
     });
 
-    it('should resolve cancel() only after an in-flight handler settled', async () => {
+    it('should hand the handler a copy with delivery info, leaving the published message as is', async () => {
         const driver = new MemoryMessageBusDriver();
-        const blocker = Promise.withResolvers<void>();
-        const order: string[] = [];
-        const consumer = await driver.consume(work, async () => {
-            await blocker.promise;
-            order.push('handled');
-        });
+        const seen: Message[] = [];
+        await driver.consume(work, (received) => { seen.push(received); });
+        const published = message(work);
 
-        const published = driver.publish(work, message(work));
-        const cancelled = consumer.cancel().then(() => { order.push('cancelled'); });
+        await driver.publish(work, published);
+        await drain();
 
-        await new Promise((resolve) => { setTimeout(resolve, 10); });
-        expect(order).toEqual([]);
-
-        blocker.resolve();
-        await Promise.all([published, cancelled]);
-        expect(order).toEqual(['handled', 'cancelled']);
-    });
-
-    it('should resolve cancel() even when the in-flight handler fails', async () => {
-        const driver = new MemoryMessageBusDriver();
-        const consumer = await driver.consume(work, () => { throw new Error('x'); });
-
-        await expect(driver.publish(work, message(work))).rejects.toThrow('x');
-        await expect(consumer.cancel()).resolves.toBeUndefined();
+        expect(seen[0]?.metadata.delivery).toEqual({ attempt: 1, maxAttempts: 1 });
+        expect(published.metadata).not.toHaveProperty('delivery');
     });
 });

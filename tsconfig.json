@@ -3,6 +3,7 @@
     "compilerOptions": {
         "paths": {
             "synergos": ["./packages/synergos/src/index.ts"],
+            "synergos/conformance": ["./packages/synergos/src/conformance/index.ts"],
             "@synergos/amqp": ["./packages/amqp/src/index.ts"]
         }
     }

@@ -11,7 +11,7 @@ export function correlate<M extends ComponentMetadata>(metadata?: M): M & { corr
 }
 
 /**
- * The transport owns attempt, timestamp and routing: a command re-dispatched with an inbound
+ * The transport owns delivery, timestamp and routing: a command re-dispatched with an inbound
  * ctx.metadata must not inherit them. A caller-given persistent is kept.
  */
 export function toMessage(
@@ -21,7 +21,7 @@ export function toMessage(
     routing: MessageRouting,
 ): Message {
     const rest = { ...metadata };
-    delete rest.attempt;
+    delete rest.delivery;
     delete rest.timestamp;
 
     // routing is overwritten in place, not deleted: the key order stays hub's

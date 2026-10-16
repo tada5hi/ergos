@@ -79,11 +79,7 @@ export class RemoteWorker<
                     return;
                 }
 
-                // the command still settles: a retry would re-run its side effects for a reply-only problem
-                const forwardedMessage = toForwardedMessage(forwarded, publish);
-                if (!await messageBus.publish(forwardedMessage)) {
-                    invokeHook(hooks, 'onUndelivered', forwardedMessage);
-                }
+                await messageBus.publish(toForwardedMessage(forwarded, publish));
             },
         });
     }

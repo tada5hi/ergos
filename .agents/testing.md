@@ -27,10 +27,20 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
 `test/unit/` holds the only test layer, one spec per module — synergos: `component`, `scheduled`,
 `hook`, `message-bus`, `memory-driver`, `local-dispatcher`, `remote-dispatcher`, `remote-worker`;
 @synergos/amqp: `driver`. Specs import the package under test from its **source** barrel
-(`'../../src'`), not from `dist/`; amqp specs import `synergos` by name (aliased to source).
+(`'../../src'`), not from `dist/`; amqp specs import `synergos` and `synergos/conformance` by name
+(aliased to source).
+
+- **Driver conformance.** `synergos/conformance` (`src/conformance/`) holds the driver contract as
+  cases (`defineDriverConformance({ describe, it }, createDriver)`, `node:assert`). `memory-driver.spec`
+  runs it against `MemoryMessageBusDriver`, `driver.spec` (@synergos/amqp) against
+  `AmqpMessageBusDriver` over `FakeAmqpClient.loopback()`. A contract case goes there, not into a
+  driver spec; driver specs keep only driver-specific behaviour.
+- **Delivery is asynchronous.** `publish()` / `dispatch()` resolve before the handlers ran. Wait
+  for a handler with a deferred, or with `drain()` (`test/unit/fakes/drain.ts`, one `setImmediate`:
+  the memory driver delivers on microtasks).
 
 - **Fakes, never `vi.fn()` / `vi.mock()`.** Shared fakes live in `test/unit/fakes/`
-  (`TestComponent`, `FakeMessageBus` implementing `IMessageBus`, `FakeAmqpClient`). The memory
+  (`TestComponent`, `FakeMessageBus` implementing `IMessageBus`, `drain`, `FakeAmqpClient`). The memory
   driver is the bus in most dispatcher and worker specs. Hooks are asserted with plain objects whose hook
   functions push into an array.
 - Every hook has a spec that it fires, and each hook site has one that a throwing hook leaves
@@ -39,7 +49,8 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
   `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
 - `driver.spec.ts` (@synergos/amqp) runs against `FakeAmqpClient` (no broker) and compares every routing
   shape with `fixtures/hub-wire.ts`, captured from hub's former driver. The only allowed
-  difference is the retry counter (body `metadata.attempt` → `x-attempt` header). Never
+  difference is the retry counter (body `metadata.attempt` → `x-attempt` header, reported to the
+  handler as `metadata.delivery`). Never
   regenerate the fixture from this driver — that would make the comparison vacuous.
 - There is no broker-backed (RabbitMQ) integration test; amqp-extension's own suite covers the broker.
 - Each package's `tsconfig.json` includes `src/` and `test/` and is what `npm run typecheck` checks

@@ -21,10 +21,14 @@ export class MessageBus implements IMessageBus {
         this.hooks = options.hooks;
     }
 
-    publish(message: Message): Promise<boolean> {
+    publish(message: Message): Promise<void> {
         invokeHook(this.hooks, 'onPublish', message);
 
         return this.driver.publish(message.metadata.routing, message);
+    }
+
+    close(): Promise<void> {
+        return this.driver.close();
     }
 
     consumeAny(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {

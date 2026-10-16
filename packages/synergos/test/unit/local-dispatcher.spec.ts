@@ -7,7 +7,6 @@ describe('src/dispatcher/local', () => {
     it('should return the forwarded events in order', async () => {
         const result = await new LocalDispatcher(new TestComponent()).dispatch('execute', { id: 'a' });
 
-        expect(result.delivered).toBe(true);
         expect(result.replies).toEqual([{
             key: 'executionFinished',
             data: { id: 'a' },

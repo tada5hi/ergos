@@ -1,5 +1,4 @@
 import type { ComponentEventMap } from '../component';
-import { invokeHook } from '../hook';
 import type {
     DispatchResult,
     IDispatcher,
@@ -27,11 +26,8 @@ export class RemoteDispatcher<
         const correlated = correlate(metadata);
         const message = toMessage(key, data, correlated, this.options.routing);
 
-        const delivered = await this.options.messageBus.publish(message);
-        if (!delivered) {
-            invokeHook(this.options.hooks, 'onUndelivered', message);
-        }
+        await this.options.messageBus.publish(message);
 
-        return { correlationId: correlated.correlationId, delivered };
+        return { correlationId: correlated.correlationId };
     }
 }

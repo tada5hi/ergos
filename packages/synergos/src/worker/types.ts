@@ -1,5 +1,5 @@
 import type { ForwardedEvent } from '../component';
-import type { IMessageBus, Message, MessageRouting } from '../message-bus';
+import type { IMessageBus, MessageRouting } from '../message-bus';
 
 /**
  * Observers; a hook that throws is ignored (see invokeHook).
@@ -10,10 +10,6 @@ export type RemoteWorkerHooks = {
      * command from the wire is forwarded too.
      */
     onUnrouted?(event: ForwardedEvent): void,
-    /**
-     * The bus resolved false for a forwarded event (memory driver); the command still settles.
-     */
-    onUndelivered?(message: Message): void,
 };
 
 export type RemoteWorkerOptions = {

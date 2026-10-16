@@ -20,6 +20,10 @@
         ".": {
             "types": "./dist/index.d.mts",
             "import": "./dist/index.mjs"
+        },
+        "./conformance": {
+            "types": "./dist/conformance.d.mts",
+            "import": "./dist/conformance.mjs"
         }
     },
     "files": [

@@ -123,8 +123,9 @@ A message's `metadata.persistent` overrides the persistence of its routing. Only
 without a `namespace` keeps messages while no consumer is connected and splits them between
 replicas.
 
-`publish()` resolves `true` once the broker has confirmed the message, and rejects when it refuses
-it.
+`publish()` resolves once the broker has confirmed the message, and rejects when it refuses
+it or the driver was closed. The driver passes synergos'
+[driver conformance](https://github.com/tada5hi/synergos/tree/master/packages/synergos#driver-conformance) suite.
 
 ## Retries
 
@@ -139,8 +140,9 @@ reached the message is acked and reported to `onDrop`. There is no dead-letter q
 
 If the re-publish itself fails, the message is requeued and comes back as a redelivery.
 
-A `work` handler sees its delivery attempt (1-based, read from `x-attempt`) as
-`message.metadata.attempt`, so it can tell its last attempt apart, e.g. to report a failure
+A handler sees `message.metadata.delivery = { attempt, maxAttempts }`: for `work`, the 1-based
+attempt from `x-attempt` and the driver's `maxAttempts`; for `pubSub`, which is not retried,
+`{ attempt: 1, maxAttempts: 1 }`. So it can tell its last attempt apart, e.g. to report a failure
 instead of throwing once more. The value is set on consume only and is never published.
 
 ## Options
@@ -187,8 +189,8 @@ synergos): it never changes how a message is settled.
   own exclusive temporary queue.
 - **Wire compatibility:** the JSON body and AMQP properties are byte-compatible with FLAME Hub's
   former driver. Only the retry counter moved, from the body (`metadata.attempt`) to the
-  `x-attempt` header; on consume the driver copies it back into `metadata.attempt`, overriding
-  a counter an older producer left in the body.
+  `x-attempt` header; on consume the driver reports it as `metadata.delivery.attempt`. A counter an
+  older producer left in the body stays in `metadata.attempt` and is ignored.
 
 ## License
 

@@ -5,6 +5,7 @@ import { AmqpMessageBusDriver } from '../../src';
 import type { AmqpMalformedMessage, AmqpMessageBusDriverHooks } from '../../src';
 import { buildMessage } from 'synergos';
 import type { Message, MessageRouting } from 'synergos';
+import { defineDriverConformance } from 'synergos/conformance';
 import { FakeAmqpClient } from './fakes/amqp-client';
 import { hubWireFixture } from './fixtures/hub-wire';
 
@@ -75,12 +76,14 @@ function toConsumeMessage(
 }
 
 describe('src/module', () => {
+    defineDriverConformance({ describe, it }, () => createDriver(FakeAmqpClient.loopback()));
+
     describe('wire compatibility with hub', () => {
         it.each(Object.keys(shapes) as (keyof typeof shapes)[])('should publish %s like hub', async (name) => {
             const client = new FakeAmqpClient();
             const routing = shapes[name];
 
-            await expect(createDriver(client).publish(routing, message(routing))).resolves.toBe(true);
+            await expect(createDriver(client).publish(routing, message(routing))).resolves.toBeUndefined();
 
             const [expected] = hubWireFixture[name];
             const [actual] = client.publishes;
@@ -191,48 +194,45 @@ describe('src/module', () => {
         expect(malformed).toHaveLength(1);
     });
 
-    it('should hand a parsed payload to the handler', async () => {
+    it('should hand a WORK handler its delivery attempt from the x-attempt header and maxAttempts', async () => {
         const client = new FakeAmqpClient();
         const seen: Message[] = [];
-        await createDriver(client).consume(shapes.pubSub, (received) => { seen.push(received); });
-
-        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.pubSub))), properties: {} });
-
-        expect(seen).toEqual([message(shapes.pubSub)]);
-    });
-
-    it('should hand a WORK handler its delivery attempt from the x-attempt header', async () => {
-        const client = new FakeAmqpClient();
-        const seen: Message[] = [];
-        await createDriver(client).consume(shapes.work, (received) => { seen.push(received); });
+        await new AmqpMessageBusDriver({
+            client,
+            defaultTopicExchange: 'FLAME',
+            maxAttempts: 3,
+        }).consume(shapes.work, (received) => { seen.push(received); });
 
         const content = Buffer.from(JSON.stringify(message(shapes.work)));
         await client.consumes[0]?.handler({ content, properties: { headers: { 'x-attempt': 3 } } });
         await client.consumes[0]?.handler({ content, properties: {} });
 
-        expect(seen.map((received) => received.metadata.attempt)).toEqual([3, 1]);
+        expect(seen.map((received) => received.metadata.delivery)).toEqual([
+            { attempt: 3, maxAttempts: 3 },
+            { attempt: 1, maxAttempts: 3 },
+        ]);
     });
 
-    it('should override an attempt counter in the body of a WORK message (an older hub producer)', async () => {
+    it('should override delivery info in the body of a message', async () => {
         const client = new FakeAmqpClient();
         const seen: Message[] = [];
         await createDriver(client).consume(shapes.work, (received) => { seen.push(received); });
 
-        const legacy = message(shapes.work);
-        legacy.metadata.attempt = 4;
-        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(legacy)), properties: {} });
+        const forged = message(shapes.work);
+        forged.metadata.delivery = { attempt: 4, maxAttempts: 4 };
+        await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(forged)), properties: {} });
 
-        expect(seen[0]?.metadata.attempt).toBe(1);
+        expect(seen[0]?.metadata.delivery).toEqual({ attempt: 1, maxAttempts: 5 });
     });
 
-    it('should not set an attempt on a PUB_SUB message', async () => {
+    it('should report attempt 1 of 1 on a PUB_SUB message (not retried)', async () => {
         const client = new FakeAmqpClient();
         const seen: Message[] = [];
         await createDriver(client).consume(shapes.pubSub, (received) => { seen.push(received); });
 
         await client.consumes[0]?.handler({ content: Buffer.from(JSON.stringify(message(shapes.pubSub))), properties: { headers: { 'x-attempt': 3 } } });
 
-        expect(seen[0]?.metadata.attempt).toBeUndefined();
+        expect(seen[0]?.metadata.delivery).toEqual({ attempt: 1, maxAttempts: 1 });
     });
 
     it('should let a handler error reach amqp-extension (which retries or nacks)', async () => {
@@ -295,24 +295,6 @@ describe('src/module', () => {
         await createDriver(client).publish(shapes.work, input);
 
         expect(client.publishes[0]?.options.persistent).toBe(false);
-    });
-
-    it('should return a consumer that cancels the amqp-extension consumer', async () => {
-        const client = new FakeAmqpClient();
-        const consumer = await createDriver(client).consume(shapes.pubSub, () => {});
-
-        await consumer.cancel();
-
-        expect(client.consumes[0]?.cancelled).toBe(true);
-    });
-
-    it('should close the client', async () => {
-        const client = new FakeAmqpClient();
-        const driver = createDriver(client);
-        await driver.close();
-
-        expect(client.closed).toBe(1);
-        await expect(driver.publish(shapes.work, message(shapes.work))).rejects.toThrow('closed');
     });
 
     it('should create a client lazily from a connection string', async () => {

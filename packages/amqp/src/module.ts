@@ -63,7 +63,7 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
         return this.clientInstance;
     }
 
-    async publish(routing: MessageRouting, message: Message): Promise<boolean> {
+    async publish(routing: MessageRouting, message: Message): Promise<void> {
         // Resolves once the broker confirmed the message (a rejection throws);
         // amqplib's boolean only reports write-buffer backpressure.
         await this.resolveExchange(routing).publish(routing.key, serializeMessage(message), {
@@ -72,12 +72,11 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
             persistent: message.metadata.persistent ?? routing.type === MessageRoutingType.WORK,
             ...this.resolveQueueOptions(routing),
         });
-
-        return true;
     }
 
     async consume(routing: MessageRouting, handler: MessageHandler): Promise<IMessageBusConsumer> {
         const isWork = routing.type === MessageRoutingType.WORK;
+        const maxAttempts = isWork ? this.options.maxAttempts ?? 5 : 1;
         const options: ConsumeOptions = {
             prefetchCount: this.options.prefetchCount ?? 1,
             // reached only when a retry re-publish fails: the message comes back as a redelivery
@@ -85,7 +84,6 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
             ...this.resolveQueueOptions(routing),
         };
         if (isWork) {
-            const maxAttempts = this.options.maxAttempts ?? 5;
             options.retry = { maxAttempts, delay: this.options.retryDelay ?? 1000 };
             // The handler's own error reaches MessageBus' onError hook first.
             // ponytail: a crashed redelivery's retries are not reported by amqp-extension, only its drop.
@@ -128,10 +126,11 @@ export class AmqpMessageBusDriver implements IMessageBusDriver {
                     return;
                 }
 
-                if (isWork) {
-                    // amqp-extension counts attempts in the x-attempt header, not in the body
-                    message.metadata.attempt = resolveAttempt(input.properties);
-                }
+                // amqp-extension counts attempts in the x-attempt header, not in the body
+                message.metadata.delivery = {
+                    attempt: isWork ? resolveAttempt(input.properties) : 1,
+                    maxAttempts,
+                };
 
                 await handler(message);
             },
