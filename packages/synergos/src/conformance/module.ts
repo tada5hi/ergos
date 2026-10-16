@@ -159,17 +159,35 @@ export function defineDriverConformance(
             await assert.rejects(driver.consume(to, () => {}));
         });
 
-        run('should keep publish order on an ordered WORK routing', async (driver) => {
+        run('should run one handler at a time, in publish order, on an ordered WORK routing', async (driver) => {
             const to = routing('work', true);
-            const all = collect(5);
-            await driver.consume(to, all.handler);
-
             const types = ['a', 'b', 'c', 'd', 'e'];
+            const release = Promise.withResolvers<void>();
+            const done = Promise.withResolvers<void>();
+            const log: string[] = [];
+            const handler: MessageHandler = async (item) => {
+                log.push(`start ${item.type}`);
+                await release.promise;
+                log.push(`end ${item.type}`);
+                if (log.length === types.length * 2) {
+                    done.resolve();
+                }
+            };
+            // two consumers: ordered means one active consumer, not just FIFO dispatch
+            await driver.consume(to, handler);
+            await driver.consume(to, handler);
+
             for (const type of types) {
                 await driver.publish(to, message(to, type));
             }
 
-            assert.deepEqual((await all.done).map((item) => item.type), types);
+            // ponytail: one event-loop turn for a second handler to start, not a proof it never does
+            await tick();
+            assert.deepEqual(log, ['start a']);
+
+            release.resolve();
+            await done.promise;
+            assert.deepEqual(log, types.flatMap((type) => [`start ${type}`, `end ${type}`]));
         });
 
         run('should report attempt 1 and maxAttempts >= 1 on a first delivery', async (driver) => {

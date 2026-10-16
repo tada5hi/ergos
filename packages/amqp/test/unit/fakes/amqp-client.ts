@@ -24,14 +24,15 @@ type FakeAmqpLog = {
     publishes: FakeAmqpPublish[],
     consumes: FakeAmqpConsume[],
     closed?: number,
-    loopback?: { index: number },
+    loopback?: { index: number, active: Map<string, Promise<void>> },
 };
 
 /**
  * Records what the driver hands amqp-extension; of() siblings share the log.
  * FakeAmqpClient.loopback() also delivers each publish to the matching consumers:
  * the default exchange round-robins (a queue), any other fans out (a queue per
- * consumer, or one per options.queue, shared round-robin).
+ * consumer, or one per options.queue, shared round-robin). A singleActiveConsumer
+ * queue goes to its first consumer, one handler at a time (prefetch 1).
  * ponytail: no queue buffering, no retry; a handler error is dropped.
  */
 export class FakeAmqpClient implements IAmqpClient {
@@ -51,7 +52,7 @@ export class FakeAmqpClient implements IAmqpClient {
         return new FakeAmqpClient(undefined, {
             publishes: [],
             consumes: [],
-            loopback: { index: 0 },
+            loopback: { index: 0, active: new Map() },
         });
     }
 
@@ -81,11 +82,15 @@ export class FakeAmqpClient implements IAmqpClient {
                 (entry.exchange.name || '') === (this.exchange.name || ''));
             // a queue (the default exchange's, or a named one) delivers once, round-robin
             const queues = Map.groupBy(matching, (entry) => (this.exchange.name ? entry.options.queue ?? entry : ''));
-            const targets = queues.values().toArray().map((group) => group[loopback.index++ % group.length]!);
+            const single = !!options.singleActiveConsumer;
+            const targets = queues.values().toArray().map((group) => group[single ? 0 : loopback.index++ % group.length]!);
             for (const entry of targets) {
-                const handled = Promise.resolve()
+                const handled = (single ? loopback.active.get(key) ?? Promise.resolve() : Promise.resolve())
                     .then(() => entry.handler({ content: Buffer.from(body), properties: {} }))
                     .catch(() => {});
+                if (single) {
+                    loopback.active.set(key, handled);
+                }
                 entry.inFlight.add(handled);
                 handled.then(() => entry.inFlight.delete(handled));
             }
