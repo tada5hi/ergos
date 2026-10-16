@@ -1,6 +1,10 @@
-import type { ILogger } from '../types';
-import type { ComponentEventMap, ComponentEventMapValue } from '../component';
-import type { IMessageBus, MessageRouting } from '../message-bus';
+import type {
+    ComponentEventMap,
+    ComponentEventMapValue,
+    ComponentMetadata,
+} from '../component';
+import type { IMessageBus, Message, MessageRouting } from '../message-bus';
+import type { ObjectLiteral } from '../types';
 
 export type CallerPayload<V extends ComponentEventMapValue = ComponentEventMapValue> = [
     data: V[0],
@@ -15,14 +19,30 @@ export type DirectCallerResponse<EventMap extends ComponentEventMap = ComponentE
     [K in keyof EventMap]?: EventMap[K][0]
 };
 
+/**
+ * Observers; a hook that throws is ignored (see invokeHook).
+ */
+export type DispatchCallerHooks = {
+    /**
+     * The bus resolved false: no consumer accepted the command (memory driver).
+     */
+    onUndelivered?(message: Message): void,
+};
+
 export type DispatchCallerOptions = {
     routing: MessageRouting,
-    /**
-     * Debug-log each publish. Default: true
-     */
-    logging?: boolean,
     messageBus: IMessageBus,
-    logger?: ILogger,
+    hooks?: DispatchCallerHooks,
+};
+
+/**
+ * Observers; a hook that throws is ignored (see invokeHook).
+ */
+export type WorkerCallerHooks = {
+    /**
+     * A child event (a reply) was dropped: no publishRouting is set.
+     */
+    onUnrouted?(key: string, data: ObjectLiteral, metadata: ComponentMetadata): void,
 };
 
 export type WorkerCallerOptions = {
@@ -32,5 +52,5 @@ export type WorkerCallerOptions = {
      */
     publishRouting?: MessageRouting,
     messageBus: IMessageBus,
-    logger?: ILogger,
+    hooks?: WorkerCallerHooks,
 };

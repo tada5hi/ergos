@@ -1,4 +1,4 @@
-import type { ILogger, ObjectLiteral } from '../types';
+import type { ObjectLiteral } from '../types';
 
 export type ComponentMetadata = {
     correlationId?: string,
@@ -60,6 +60,16 @@ export interface IComponent<EventMap extends ComponentEventMap = ComponentEventM
     ): Promise<void>;
 }
 
+/**
+ * Observers; a hook that throws is ignored (see invokeHook).
+ */
+export type ScheduledComponentHooks = {
+    /**
+     * A pass failed. start() still resolves; the next tick runs again.
+     */
+    onError?(error: unknown): void,
+};
+
 export type ScheduledComponentOptions = {
     /**
      * node-cron expression
@@ -70,9 +80,5 @@ export type ScheduledComponentOptions = {
      * Run one pass in start() before scheduling. Default: true
      */
     runOnStart?: boolean,
-    logger?: ILogger,
-    /**
-     * For log lines.
-     */
-    name?: string,
+    hooks?: ScheduledComponentHooks,
 };

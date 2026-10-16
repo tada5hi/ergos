@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DispatchCaller, MemoryMessageBusDriver, MessageBus } from '../../src';
 import type { Message, MessageRouting } from '../../src';
-import { FakeLogger } from './fakes/logger';
 import { FakeMessageBus } from './fakes/message-bus';
 
 const routing: MessageRouting = { type: 'work', key: 'commands' };
@@ -30,17 +29,33 @@ describe('src/caller/dispatch', () => {
         expect(messageBus.published.map((message) => message.type)).toEqual(['run']);
     });
 
-    it('should warn when no consumer accepted the command', async () => {
-        const logger = new FakeLogger();
-        const messageBus = new MessageBus({ driver: new MemoryMessageBusDriver() });
+    it('should report a command no consumer accepted to onUndelivered', async () => {
+        const undelivered: Message[] = [];
+        const messageBus = new FakeMessageBus();
         const caller = new DispatchCaller({
             routing,
             messageBus,
-            logger,
-            logging: false,
+            hooks: { onUndelivered: (message) => { undelivered.push(message); } },
         });
 
-        await caller.call('run', {}, {});
-        expect(logger.messages('warn')).toHaveLength(1);
+        await caller.call('run', { id: '1' }, {});
+        expect(undelivered).toEqual([]);
+
+        messageBus.accepted = false;
+        await caller.call('run', { id: '2' }, {});
+        expect(undelivered).toEqual([messageBus.published[1]]);
+        expect(undelivered[0]?.data).toEqual({ id: '2' });
+    });
+
+    it('should resolve when onUndelivered throws', async () => {
+        const messageBus = new FakeMessageBus();
+        messageBus.accepted = false;
+        const caller = new DispatchCaller({
+            routing,
+            messageBus,
+            hooks: { onUndelivered: () => { throw new Error('hook'); } },
+        });
+
+        await expect(caller.call('run', {}, {})).resolves.toBeUndefined();
     });
 });

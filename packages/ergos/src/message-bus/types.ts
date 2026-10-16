@@ -1,4 +1,4 @@
-import type { ILogger, ObjectLiteral } from '../types';
+import type { ObjectLiteral } from '../types';
 import type { MessageRoutingType } from './constants';
 
 export type MessageRouting = {
@@ -17,10 +17,6 @@ export type MessageMetadata = {
     timestamp: number,
     persistent?: boolean,
     routing: MessageRouting,
-};
-
-export type MessageBusPublishOptions = {
-    logging?: boolean,
 };
 
 export type Message<
@@ -63,9 +59,31 @@ export interface IMessageBusConsumer {
     cancel(): Promise<void>;
 }
 
+/**
+ * Observers (logging, metrics). A hook that throws is ignored (see invokeHook).
+ */
+export type MessageBusHooks = {
+    /**
+     * Before the message is handed to the driver.
+     */
+    onPublish?(message: Message): void,
+    /**
+     * A message arrived, before it is dispatched to a handler.
+     */
+    onConsume?(message: Message, routing: MessageRouting): void,
+    /**
+     * No handler (and no '*') accepted the message; it is settled (acked) without error.
+     */
+    onUnhandled?(message: Message, routing: MessageRouting): void,
+    /**
+     * The handler threw; the error is rethrown afterwards (the driver retries or nacks).
+     */
+    onError?(error: unknown, message: Message, routing: MessageRouting): void,
+};
+
 export type MessageBusOptions = {
     driver: IMessageBusDriver,
-    logger?: ILogger,
+    hooks?: MessageBusHooks,
 };
 
 /**
@@ -75,7 +93,7 @@ export interface IMessageBus {
     /**
      * Resolves true once a consumer (memory) or the broker (amqp) accepted it.
      */
-    publish(message: Message, options?: MessageBusPublishOptions): Promise<boolean>;
+    publish(message: Message): Promise<boolean>;
     /**
      * A handler for the message type wins over '*'. A message no handler
      * accepts is settled (acked) without error.

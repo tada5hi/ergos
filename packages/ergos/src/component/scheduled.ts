@@ -1,10 +1,11 @@
 import type { ScheduledTask } from 'node-cron';
 import cron from 'node-cron';
+import { invokeHook } from '../hook';
 import type { IComponent, ScheduledComponentOptions } from './types';
 
 /**
  * A background job: one pass in start() (unless disabled), then one per cron
- * tick, never overlapping. A failing pass is logged and never rejects —
+ * tick, never overlapping. A failing pass is reported to hooks.onError and never rejects —
  * start() is typically fire-and-forget, the next tick retries.
  */
 export function defineScheduledComponent(options: ScheduledComponentOptions): IComponent {
@@ -24,8 +25,7 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IC
             await options.run();
             lastSuccessAt = Date.now();
         } catch (e) {
-            options.logger?.warn(`Component ${options.name ?? 'scheduled'} pass failed.`);
-            options.logger?.warn(e);
+            invokeHook(options.hooks, 'onError', e);
         } finally {
             runningSince = undefined;
         }

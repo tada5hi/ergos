@@ -1,9 +1,9 @@
-import type { ILogger } from '../types';
 import type {
     ComponentEventMap,
     ComponentStatus,
     IComponent,
 } from '../component';
+import { invokeHook } from '../hook';
 import type { IMessageBus, IMessageBusConsumer } from '../message-bus';
 import { buildMessage } from '../message-bus';
 import type {
@@ -25,15 +25,12 @@ export class WorkerCaller<
 
     protected messageBus: IMessageBus;
 
-    protected logger?: ILogger;
-
     protected consumer?: IMessageBusConsumer;
 
     constructor(component: IComponent<EventMap>, options: WorkerCallerOptions) {
         this.component = component;
         this.options = options;
         this.messageBus = options.messageBus;
-        this.logger = options.logger;
     }
 
     async start(): Promise<void> {
@@ -80,9 +77,7 @@ export class WorkerCaller<
             handle: async (childData, childContext) => {
                 const { publishRouting } = this.options;
                 if (!publishRouting) {
-                    this.logger?.warn(
-                        `Component ${component.constructor.name} event ${childContext.key} could not be handled.`,
-                    );
+                    invokeHook(this.options.hooks, 'onUnrouted', childContext.key, childData, childContext.metadata);
                     return;
                 }
 
