@@ -438,6 +438,23 @@ describe('src/worker/module', () => {
         expect(component.lifecycle).toEqual(['start', 'stop']);
     });
 
+    it('should end stopped when component.start() stops its own worker', async () => {
+        const messageBus = new FakeMessageBus();
+        const component = new TestComponent();
+        let stopped: Promise<void> | undefined;
+        const worker = new RemoteWorker(component, { messageBus, consume: commands });
+        component.start = async () => {
+            component.lifecycle.push('start');
+            stopped = worker.stop();
+        };
+
+        await worker.start();
+        await stopped;
+
+        expect(component.lifecycle).toEqual(['start', 'stop']);
+        expect(messageBus.active).toBe(0);
+    });
+
     it('should resolve a concurrent stop only after the component stopped', async () => {
         const messageBus = new FakeMessageBus();
         const component = new TestComponent();

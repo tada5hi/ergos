@@ -169,7 +169,7 @@ if (!result.delivered) await local.dispatch('build', data);
   component's side effects for a reply-only problem.
 - `stop()`: cancel the consumer (waits for the handler in flight), then `component.stop()`.
 - `status()`: the component's.
-- Lifecycle guarantees, from the shared helper:
+- Lifecycle guarantees, from the lifecycle helper:
   - a `start()` while one is in flight joins it — one consumer, ever, per running worker;
   - a `stop()` while `start()` is in flight waits for it, then releases — no consumer survives;
   - `start()` after `stop()` starts again;

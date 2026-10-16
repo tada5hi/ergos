@@ -40,13 +40,14 @@ export function createLifecycle(acquire: () => Promise<Release>) {
 
     return {
         async start() {
-            // acquire synchronously unless a release is in flight, so a stop() right after sees it
+            // set state synchronously unless a release is in flight, so a stop() right after sees it
             while (settled) {
                 await settled;
             }
 
             if (!state) {
-                const current = acquire();
+                // acquire's body runs a microtask later: a stop() it makes re-entrantly sees the state
+                const current = Promise.resolve().then(acquire);
                 state = current;
                 current.catch(() => {
                     if (state === current) {

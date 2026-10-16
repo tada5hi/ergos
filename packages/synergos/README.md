@@ -181,7 +181,8 @@ await cleaner.stop();
 - Passes never overlap: a tick while a pass is still running is skipped.
 - A failing pass goes to `hooks.onError` and never rejects. The next tick simply runs again.
 - `stop()` never waits for a pass in flight, so a pass may stop its own component. Stopped during
-  the first pass, the component never schedules a tick.
+  the first pass, the component never schedules a tick. A pass must not *await* its component's
+  `start()`, which would join the pass itself: restart with `void cleaner.start()`.
 - An invalid cron expression throws when the component is defined, before any pass runs.
 
 ## Message bus
@@ -303,7 +304,9 @@ if (!result.delivered) {
 A `RemoteWorker` is itself an `IComponent`: start and stop it with the rest of your application.
 `start()` starts the component, then consumes; `stop()` cancels the consumer, waits for the handler
 in flight, then stops the component. A concurrent `start()` joins the one in flight, a `stop()`
-during `start()` leaves no consumer behind, and a failed `start()` can be retried.
+during `start()` leaves no consumer behind, and a failed `start()` can be retried. A handler, or the
+component's own `start()` / `stop()`, must not *await* the worker's `stop()`: the stop waits for
+them. Call `void worker.stop()` instead; the worker ends stopped once they return.
 
 A `LocalDispatcher` has no lifecycle: start and stop the component, and the `reply` inbox you hand
 it, yourself.
@@ -318,9 +321,10 @@ next one. Dispatchers and workers treat both kinds the same.
 A `RemoteWorker` passes an inbound command's metadata to the component unchanged, including
 `attempt` from a retrying driver. The events it publishes keep the rest of the metadata (such as
 the `correlationId`) but drop the command's `attempt`, `timestamp`, `persistent` and `routing`.
-Likewise, a dispatcher never sends a caller's `attempt`, `timestamp` or `routing`, so dispatching
-with an inbound `context.metadata` (to keep the `correlationId`) starts a fresh command; only a
-`persistent` the caller passes is kept.
+Likewise, a `RemoteDispatcher` never sends a caller's `attempt`, `timestamp` or `routing`, so
+dispatching with an inbound `context.metadata` (to keep the `correlationId`) starts a fresh command;
+only a `persistent` the caller passes is kept. A `LocalDispatcher` hands the metadata to the
+component as given.
 
 A forwarded event whose publish resolves `false` (no consumer, memory driver) is reported to
 `onUndelivered`, and the command still settles (acked): a retry would re-run its side effects for a
