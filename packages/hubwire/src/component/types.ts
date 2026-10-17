@@ -95,7 +95,8 @@ export type ScheduledComponentHooks = {
      */
     onError?(error: unknown): void,
     /**
-     * Another replica holds this tick's lock: the pass was skipped.
+     * Another replica holds this tick's lock, or the tick fired lockTtlMs or more
+     * late (after its key may have expired): the pass was skipped.
      */
     onSkip?(scheduledAt: Date): void,
 };

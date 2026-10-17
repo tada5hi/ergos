@@ -361,6 +361,33 @@ describe('src/component/scheduled', () => {
                 expect(c.status().lastSuccessAt).toBeUndefined();
             });
 
+            it('should skip a tick that fires lockTtlMs or more late and report it to onSkip', async () => {
+                vi.useFakeTimers({ now: NOW });
+                const lock = new MemoryScheduleLock();
+                // another replica ran the tick on time; its key expires after 60 s
+                await lock.acquire('cleanup:2026-01-15T10:00:01.000Z', 60_000);
+                const skipped: string[] = [];
+                const seen: string[] = [];
+                const c = defineScheduledComponent({
+                    name: 'cleanup',
+                    schedule: '* * * * * *',
+                    lock,
+                    hooks: { onSkip: (at) => { skipped.push(at.toISOString()); } },
+                    run: async ({ scheduledAt }) => { seen.push(scheduledAt.toISOString()); },
+                });
+                await c.start();
+                // the process stalls for 61 s before the :01 timer fires
+                vi.setSystemTime(Date.now() + 61_000);
+                await vi.advanceTimersByTimeAsync(500);
+                expect(seen).toEqual([]);
+                expect(skipped).toEqual(['2026-01-15T10:00:01.000Z']);
+                expect(lock.acquired).toHaveLength(1);
+                // the next tick runs as usual
+                await vi.advanceTimersByTimeAsync(1000);
+                await c.stop();
+                expect(seen).toEqual(['2026-01-15T10:01:03.000Z']);
+            });
+
             it('should fail closed when acquire rejects, report onError and retry next tick', async () => {
                 vi.useFakeTimers({ now: NOW });
                 const lock = new MemoryScheduleLock();

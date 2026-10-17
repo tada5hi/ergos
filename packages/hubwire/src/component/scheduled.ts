@@ -139,6 +139,14 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
             last = slot;
             // re-arm before the pass: a pass that stops its own component clears this timer
             arm();
+
+            if (lock && Date.now() - slot >= lock.ttlMs) {
+                // fired so late (a stall, a sleep) that the tick's key may have expired after
+                // another replica ran it: running it now could run it twice
+                invokeHook(options.hooks, 'onSkip', new Date(slot));
+                return;
+            }
+
             void execute(new Date(slot), true);
         }, Math.min(slot - Date.now(), RECHECK_MS));
     }

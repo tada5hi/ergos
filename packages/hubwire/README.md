@@ -232,12 +232,14 @@ const report = defineScheduledComponent({
 });
 ```
 
-- The key is `` `${name}:${scheduledAt.toISOString()}` ``. It is UTC, so replicas in different
-  host zones agree on it. `name` is required with a lock and must be unique per schedule among the
+- The key is `` `${name}:${scheduledAt.toISOString()}` ``. Replicas agree on it only when they
+  evaluate the schedule in the same zone: without `timezone` a slot follows the host zone, so set
+  `timezone` (e.g. `'UTC'`) whenever a lock is used. `name` is required with a lock and must be unique per schedule among the
   processes that share the lock.
 - The key is never released: `lockTtlMs` (default 60 s) ends it. It must exceed the clock skew
   between replicas plus how late a replica can fire (a late timer still runs its tick, with the
-  planned `scheduledAt`).
+  planned `scheduledAt`). A timer that fires `lockTtlMs` or more late (an event-loop stall, a
+  sleep) skips its tick and reports it to `hooks.onSkip`, since the key may already have expired.
 - So a tick runs **at most once**: a replica that wins the key and then crashes, or whose pass
   fails, loses that tick for every replica. The next tick is independent.
 - `acquire()` rejecting skips the tick (fail closed) and goes to `hooks.onError`. A tick another
@@ -253,7 +255,9 @@ const report = defineScheduledComponent({
 defaults to the process's zone. The process zone does not matter once `timezone` is set.
 
 - A local time a spring-forward change skips runs one hour later, once: `30 2 * * *` in
-  `Europe/Berlin` runs at 03:30 CEST on 2026-03-29, and at 02:30 again the next day.
+  `Europe/Berlin` runs at 03:30 CEST on 2026-03-29, and at 02:30 again the next day. This holds
+  only when the pattern does not already run in that later hour; otherwise the skipped slot is
+  dropped (`0,30 2 * * *` runs at 03:00 CEST on 2026-03-29 and skips 02:30).
 - On a fall-back day the repeated hour runs once: `*/15 * * * *` in `Europe/Berlin` runs 02:45 CEST,
   then 03:00 CET, skipping the second 02:xx hour, and `0 2 * * *` runs at the first 02:00.
 - Use `timezone: 'UTC'` for a fixed interval through every DST change.
@@ -549,7 +553,7 @@ to your logger, metrics or tracing:
 | | `onError(error, message, routing)` | A handler threw. The error is rethrown to the driver afterwards |
 | `RemoteWorker` | `onUnrouted(event)` | A forwarded event was dropped because no `publish` routing is set |
 | `defineScheduledComponent` | `onError(error)` | A pass failed, or the lock's `acquire()` rejected (the tick is skipped) |
-| | `onSkip(scheduledAt)` | Another replica holds this tick's lock. The pass is skipped |
+| | `onSkip(scheduledAt)` | Another replica holds this tick's lock, or the tick fired `lockTtlMs` or more late. The pass is skipped |
 
 ```typescript
 const messageBus = new MessageBus({
