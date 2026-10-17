@@ -107,6 +107,21 @@ export interface IScheduledComponent extends IComponent {
     settled(): Promise<void>;
 }
 
+/**
+ * Elects one replica per tick. Every implementation keeps this contract:
+ * the first caller for a key wins, atomically across callers and replicas;
+ * the key stays held until `ttlMs` elapsed (free at exactly acquiredAt + ttlMs) and is never
+ * released: the key is unique per tick, and a release would let a replica that fires
+ * the same tick late win it again. A rejected `acquire` counts as not acquired:
+ * the tick is skipped and the error reported.
+ */
+export interface IScheduleLock {
+    /**
+     * true when this caller won `key` for `ttlMs`; false while another holds it.
+     */
+    acquire(key: string, ttlMs: number): Promise<boolean>;
+}
+
 export type ScheduledComponentRunContext = {
     /**
      * The planned fire time of the tick (ms 0), also when its timer fires late;
