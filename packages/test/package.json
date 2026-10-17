@@ -1,6 +1,6 @@
 {
     "name": "@hubwire/test",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "type": "module",
     "description": "Test-framework-agnostic conformance suite for hubwire message bus drivers (vitest, jest, node:test).",
     "author": {
@@ -47,9 +47,9 @@
     },
     "license": "MIT",
     "devDependencies": {
-        "hubwire": "^0.2.1"
+        "hubwire": "^0.2.2"
     },
     "peerDependencies": {
-        "hubwire": "^0.2.1"
+        "hubwire": "^0.2.2"
     }
 }
