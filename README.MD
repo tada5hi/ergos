@@ -78,7 +78,7 @@ await new RemoteDispatcher({ messageBus, routing: commands }).dispatch('build', 
 |---|---|---|
 | [`hubwire`](./packages/hubwire) | [![npm](https://badge.fury.io/js/hubwire.svg)](https://npmjs.com/package/hubwire) | Components, scheduled components, the message bus with its in-memory driver, the local and remote dispatchers, and the remote worker. One runtime dependency (`croner`) |
 | [`@hubwire/amqp`](./packages/amqp) | [![npm](https://badge.fury.io/js/@hubwire%2Famqp.svg)](https://npmjs.com/package/@hubwire/amqp) | `AmqpMessageBusDriver`: the message bus over RabbitMQ, with retries and backoff, built on [amqp-extension](https://www.npmjs.com/package/amqp-extension) |
-| [`@hubwire/test`](./packages/test) | [![npm](https://badge.fury.io/js/@hubwire%2Ftest.svg)](https://npmjs.com/package/@hubwire/test) | The driver conformance suite (vitest, jest, `node:test`) and test fakes (`FakeMessageBus`, `drain`) |
+| [`@hubwire/test`](./packages/test) | [![npm](https://badge.fury.io/js/@hubwire%2Ftest.svg)](https://npmjs.com/package/@hubwire/test) | The driver conformance suite (vitest, jest, `node:test`) and test fakes (`FakeMessageBus`, `MemoryScheduleLock`, `drain`) |
 
 ```bash
 npm install hubwire --save
