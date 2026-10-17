@@ -48,7 +48,7 @@ hubwire gives all of that one shape:
 | **Transport** | Handler code is written against amqplib, Redis or a function call | The handler only sees `(data, context)`. A `LocalDispatcher` or a `RemoteDispatcher` decides how it is reached, and both implement the same `IDispatcher` |
 | **Replies** | A second queue, wired and correlated by hand | `context.handle('buildFinished', …)` emits a reply, `RemoteWorker` publishes it, and the dispatch's `correlationId` carries over |
 | **Tests** | A broker in CI, or `vi.mock` on the client | `MemoryMessageBusDriver`: in-process and deterministic, with the same delivery contract as the amqp driver |
-| **Cron jobs** | Overlapping runs, an unhandled rejection on a failing pass | `defineScheduledComponent`: a first pass on start, no overlap, failures go to a hook |
+| **Cron jobs** | Overlapping runs, an unhandled rejection on a failing pass | `defineScheduledComponent`: a first pass on start, no overlap, failures go to a hook, a lock per tick across replicas, timezones |
 | **Shutdown** | Exit and hope the handler in flight finished | `RemoteWorker.stop()` waits for the handler in flight |
 | **Observability** | A logger dependency in every class | Typed `hooks` (`onError`, `onRetry`, …). A hook that throws is ignored and can never turn an ack into a retry |
 

@@ -15,7 +15,7 @@ An npm workspaces monorepo with three packages:
   `hubwire` is a peer.
 - **`@hubwire/test`** (`packages/test`) — test kit for consumers and driver authors:
   `defineDriverConformance` (the driver contract as test-framework-agnostic cases on `node:assert`;
-  callers pass vitest's / jest's / node:test's `describe` / `it`), `FakeMessageBus`, `drain()`.
+  callers pass vitest's / jest's / node:test's `describe` / `it`), `FakeMessageBus`, `MemoryScheduleLock`, `drain()`.
   `hubwire` is a peer + dev dependency.
 
 Consumers: FLAME Hub and authup. ESM-only. Observability is through typed `hooks` options,

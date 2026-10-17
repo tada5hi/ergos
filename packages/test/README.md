@@ -53,6 +53,7 @@ are left behind (`close()` deletes no queue), so point it at a throwaway vhost.
 | Export | Purpose |
 |---|---|
 | `FakeMessageBus` | An `IMessageBus` that records publishes (`published`) and consumes (`consumed`) and never delivers. Set `publishError`, `consumeError`, `cancelError` or `consumeGate` to drive a failure or a race |
+| `MemoryScheduleLock` | An in-process `IScheduleLock`. `acquired` records every won key with its `ttlMs`; set `acquireError` to make `acquire()` reject. Expiry reads `Date.now()`, so vitest's fake timers drive it |
 | `drain()` | Resolves once the microtasks queued so far ran. The memory driver delivers on microtasks, so a whole publish → handler → publish chain is done |
 
 ```typescript
@@ -64,6 +65,19 @@ await new RemoteDispatcher({ messageBus, routing: { type: 'work', key: 'builder'
     .dispatch('build', { id: '1' });
 
 messageBus.published[0].type; // 'build'
+```
+
+Two replicas of one scheduled component, sharing a lock:
+
+```typescript
+import { defineScheduledComponent } from 'hubwire';
+import { MemoryScheduleLock } from '@hubwire/test';
+
+const lock = new MemoryScheduleLock();
+const define = () => defineScheduledComponent({ name: 'cleanup', schedule: '* * * * * *', lock, run: async () => {} });
+await Promise.all([define().start(), define().start()]);
+await vi.advanceTimersByTimeAsync(1000);
+lock.acquired; // [{ key: 'cleanup:<tick ISO time>', ttlMs: 60000 }]: one pass per tick
 ```
 
 ## License

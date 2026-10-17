@@ -180,7 +180,7 @@ import { defineScheduledComponent } from 'hubwire';
 
 const cleaner = defineScheduledComponent({
     schedule: '*/5 * * * *', // every five minutes
-    run: () => sessions.deleteExpired(new Date()),
+    run: ({ scheduledAt }) => sessions.deleteExpired(scheduledAt),
     hooks: {
         onError: (error) => logger.warn('session cleanup failed', error),
     },
@@ -192,6 +192,8 @@ await cleaner.stop();
 await cleaner.settled(); // the pass in flight, if any, has finished
 ```
 
+- `run` receives `{ scheduledAt }`: the tick's planned time (ms 0), also when its timer fires
+  late; for the first pass, the time `start()` ran it.
 - `start()` runs a first pass before scheduling. Pass `runOnStart: false` to wait for the first tick.
 - Passes never overlap: a tick while a pass is still running is skipped.
 - A failing pass goes to `hooks.onError` and never rejects. The next tick simply runs again.
@@ -202,6 +204,59 @@ await cleaner.settled(); // the pass in flight, if any, has finished
   after `stop()`; it resolves at once when no pass is running. A pass must never await its own
   component's `settled()`: it would wait for itself and deadlock.
 - An invalid cron expression throws when the component is defined, before any pass runs.
+  Expressions are [croner](https://croner.56k.guru)'s with 5 or 6 fields (seconds first); croner
+  also understands `L`, `W`, `#`, `?` and nicknames such as `@daily`.
+
+### Several replicas
+
+Run the same component in every replica and give it a `lock`: per tick, only the replica that
+acquires the tick's key runs the pass.
+
+```typescript
+import type { IScheduleLock } from 'hubwire';
+
+const lock: IScheduleLock = {
+    // true when this caller won the key for ttlMs, false while another replica holds it
+    acquire: (key, ttlMs) => redisLock.tryAcquire(key, ttlMs),
+};
+
+const report = defineScheduledComponent({
+    name: 'daily-report',
+    schedule: '0 7 * * *',
+    timezone: 'Europe/Berlin',
+    lock,
+    run: ({ scheduledAt }) => reports.send(scheduledAt),
+    hooks: {
+        onSkip: (scheduledAt) => logger.debug('another replica runs this tick', scheduledAt),
+    },
+});
+```
+
+- The key is `` `${name}:${scheduledAt.toISOString()}` ``. It is UTC, so replicas in different
+  host zones agree on it. `name` is required with a lock and must be unique per schedule among the
+  processes that share the lock.
+- The key is never released: `lockTtlMs` (default 60 s) ends it. It must exceed the clock skew
+  between replicas plus how late a replica can fire (a late timer still runs its tick, with the
+  planned `scheduledAt`).
+- So a tick runs **at most once**: a replica that wins the key and then crashes, or whose pass
+  fails, loses that tick for every replica. The next tick is independent.
+- `acquire()` rejecting skips the tick (fail closed) and goes to `hooks.onError`. A tick another
+  replica holds goes to `hooks.onSkip`.
+- `status().lastSuccessAt` counts only the passes this replica ran, so it stays empty on replicas
+  that never win. Point a health check across replicas at `onSkip` as well.
+- With a lock, `runOnStart` defaults to `false`: the first pass is never locked (its `scheduledAt`
+  differs per replica), so an explicit `runOnStart: true` runs it on every replica.
+
+### Timezones and DST
+
+`timezone` is an IANA zone (`'Europe/Berlin'`). It is validated when the component is defined and
+defaults to the process's zone. The process zone does not matter once `timezone` is set.
+
+- A local time a spring-forward change skips runs one hour later, once: `30 2 * * *` in
+  `Europe/Berlin` runs at 03:30 CEST on 2026-03-29, and at 02:30 again the next day.
+- On a fall-back day the repeated hour runs once: `*/15 * * * *` in `Europe/Berlin` runs 02:45 CEST,
+  then 03:00 CET, skipping the second 02:xx hour, and `0 2 * * *` runs at the first 02:00.
+- Use `timezone: 'UTC'` for a fixed interval through every DST change.
 
 ## Message bus
 
@@ -493,7 +548,8 @@ to your logger, metrics or tracing:
 | | `onExpired(message, routing)` | Its `metadata.expiresAt` had passed. It is acked without a handler |
 | | `onError(error, message, routing)` | A handler threw. The error is rethrown to the driver afterwards |
 | `RemoteWorker` | `onUnrouted(event)` | A forwarded event was dropped because no `publish` routing is set |
-| `defineScheduledComponent` | `onError(error)` | A pass failed |
+| `defineScheduledComponent` | `onError(error)` | A pass failed, or the lock's `acquire()` rejected (the tick is skipped) |
+| | `onSkip(scheduledAt)` | Another replica holds this tick's lock. The pass is skipped |
 
 ```typescript
 const messageBus = new MessageBus({
@@ -517,7 +573,8 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
 | `defineScheduledComponent` | function | A cron job as an `IScheduledComponent` (an `IComponent` with `settled()`) |
 | `IComponent`, `ComponentStatus`, `ComponentEventMap`, `ComponentMetadata`, `ComponentHandler`, `ComponentHandlerFn`, `ComponentHandlerContext`, `ComponentHandleOptions` | type | The component contract and handler types |
 | `ICallable`, `ForwardedEvent` | type | A component with a `handle()`, and one forwarded event |
-| `IScheduledComponent`, `ScheduledComponentOptions` | type | A scheduled component, and its options |
+| `IScheduledComponent`, `ScheduledComponentOptions`, `ScheduledComponentRunContext` | type | A scheduled component, its options, and what `run` receives (`scheduledAt`) |
+| `IScheduleLock` | type | Elects one replica per tick: `acquire(key, ttlMs)` |
 | `LocalDispatcher`, `RemoteDispatcher`, `RemoteWorker` | class | See [Dispatchers and workers](#dispatchers-and-workers) |
 | `IDispatcher`, `DispatchResult`, `LocalDispatchResult`, `LocalDispatcherOptions`, `RemoteDispatcherOptions`, `RemoteWorkerOptions` | type | Dispatcher contract, results and options |
 | `MessageBus` | class | Type dispatch over a driver, with hooks |

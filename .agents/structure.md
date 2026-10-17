@@ -38,9 +38,11 @@ hubwire/
 │       │   ├── index.ts                 # Public entry point
 │       │   ├── conformance/             # defineDriverConformance, ConformanceFramework, ConformanceDriverFactory
 │       │   ├── fake-message-bus.ts      # FakeMessageBus (IMessageBus that records, never delivers)
+│       │   ├── memory-schedule-lock.ts  # MemoryScheduleLock (in-process IScheduleLock, expiry from Date.now())
 │       │   └── drain.ts                 # drain(): one setImmediate
 │       ├── test/
 │       │   ├── unit/memory.spec.ts      # the suite against MemoryMessageBusDriver
+│       │   ├── unit/memory-schedule-lock.spec.ts
 │       │   └── vitest.config.ts         # aliases `hubwire` to ../hubwire/src
 │       └── package.json, README.md, LICENSE, tsconfig*.json, tsdown.config.ts
 ├── .github/
@@ -70,9 +72,9 @@ hubwire/
 
 | Module | Purpose |
 |---|---|
-| `hubwire/src/component/types.ts` | `IComponent` (`start` / `stop` / `status`, optional `handle` and `settled`), `ICallable` (`handle` required), `IScheduledComponent` (`settled` required) |
+| `hubwire/src/component/types.ts` | `IComponent` (`start` / `stop` / `status`, optional `handle` and `settled`), `ICallable` (`handle` required), `IScheduledComponent` (`settled` required), `ScheduledComponentOptions` (a union: `lock` requires `name`), `ScheduledComponentRunContext` (`scheduledAt`), `IScheduleLock` (`acquire(key, ttlMs)`, never released), `ScheduledComponentHooks` (`onError`, `onSkip`) |
 | `hubwire/src/component/module.ts` | `Component`: key → handler map, `'*'` fallback, per-handler memoized `initialize()`, child events via `context.handle`, unhandled → `options.handle`, status of top-level calls |
-| `hubwire/src/component/scheduled.ts` | `defineScheduledComponent`: cron expression validated at definition (croner, 5 or 6 fields), first pass on start, then its own timer loop over croner's `nextRun()` (waits at most 30 s per timer, re-evaluates a slot croner answers in the past) that passes each tick's planned slot as `scheduledAt`, no overlap (a tick during a pass joins it), a failed pass → `hooks.onError`; `stop()` never waits for a pass (a pass may stop its own component), stop-during-start never schedules, the timer is cleared; returns an `IScheduledComponent` whose `settled()` resolves once no pass runs (a shutdown awaits it after `stop()`; a pass must never await its own) |
+| `hubwire/src/component/scheduled.ts` | `defineScheduledComponent`: cron expression validated at definition (croner, 5 or 6 fields), first pass on start, then its own timer loop over croner's `nextRun()` (waits at most 30 s per timer, re-evaluates a slot croner answers in the past) that passes each tick's planned slot as `scheduledAt`, no overlap (a tick during a pass joins it), a failed pass → `hooks.onError`; `stop()` never waits for a pass (a pass may stop its own component), stop-during-start never schedules, the timer is cleared; `timezone` validated at definition (`Intl.DateTimeFormat`); with a `lock` (and a required `name`) each tick's pass first acquires `${name}:${scheduledAt ISO}` for `lockTtlMs` (default 60 s), never releases it, skips on `false` (`onSkip`) or a rejection (`onError`, fail closed), and the start pass (off by default with a lock) is never locked; returns an `IScheduledComponent` whose `settled()` resolves once no pass runs (a shutdown awaits it after `stop()`; a pass must never await its own) |
 | `hubwire/src/dispatcher/` | `IDispatcher` → `{ correlationId }`. `LocalDispatcher` (in-process, returns forwarded events as `replies`, optional `reply` component, no lifecycle), `RemoteDispatcher` (publishes a command; a rejected publish rejects `dispatch()`; no hooks) |
 | `hubwire/src/dispatcher/wire.ts` | Internal (not exported): `correlate`, `toMessage` (drops a caller's `delivery`, a legacy body `attempt` and `timestamp`, overwrites `routing` in place), `fromMessage` (the only wire cast), `toForwardedMessage` (also drops `persistent` and `expiresAt`). Used by the dispatchers and `RemoteWorker` |
 | `hubwire/src/worker/` | `RemoteWorker`: consumes a routing into an `ICallable`, publishes forwarded events (replies and unhandled commands) to `publish`, else `onUnrouted`; a rejected publish fails the command. Itself an `IComponent` on the internal `worker/lifecycle.ts` (`createLifecycle(acquire)`: a `start()` joins one in flight, a `stop()` waits for it and releases, calls during a release queue in call order so the last one wins, a failed `start()` or release can be retried) |
@@ -81,6 +83,7 @@ hubwire/
 | `amqp/src/` | `AmqpMessageBusDriver`: routing → exchange/queue options, publish properties (`persistent`: `metadata.persistent` ?? `routing.persistent` ?? WORK; `expiresAt` → `expiration`), decode + guard (`onMalformed`), `metadata.delivery` (WORK and a PUB_SUB `queue`: `x-attempt` + `maxAttempts`; plain PUB_SUB: 1/1), a PUB_SUB `queue` → amqp-extension's consume `queue` (durable, shared, retried; the publisher declares no queue); every WORK → the default exchange, queue `key` (`namespace/key` with a namespace; publisher and consumer both declare it), retry/drop reporting (`onRetry` / `onDrop`); retry and the redelivery guard are amqp-extension's |
 | `test/src/conformance/` | `defineDriverConformance({ describe, it }, createDriver)`: the driver contract as cases on `node:assert`, one fresh driver per case (closed by the case), a `conformance-<uuid>` key each. Imports no test framework: callers pass vitest's, jest's or node:test's `describe` / `it` |
 | `test/src/fake-message-bus.ts`, `test/src/drain.ts` | `FakeMessageBus` (records publishes and consumes, never delivers; injectable errors and a consume gate) and `drain()`, shared by hubwire's specs and consumers' |
+| `test/src/memory-schedule-lock.ts` | `MemoryScheduleLock`: in-process `IScheduleLock` (first caller wins, free at exactly acquiredAt + ttlMs from `Date.now()`, `acquired` log, `acquireError`) |
 
 ## Hooks
 
