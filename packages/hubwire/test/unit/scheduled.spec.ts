@@ -581,6 +581,26 @@ describe('src/component/scheduled', () => {
         })).toThrow('name');
     });
 
+    it('should reject an expression without a future run at definition', () => {
+        expect(() => defineScheduledComponent({
+            schedule: '0 0 31 2 *',
+            runOnStart: false,
+            run: async () => {},
+        })).toThrow('0 0 31 2 *');
+    });
+
+    it('should reject a lockTtlMs that is not a positive finite number', () => {
+        for (const lockTtlMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+            expect(() => defineScheduledComponent({
+                name: 'cleanup',
+                schedule: '* * * * *',
+                lock: new MemoryScheduleLock(),
+                lockTtlMs,
+                run: async () => {},
+            })).toThrow(`Invalid lockTtlMs: ${lockTtlMs}`);
+        }
+    });
+
     it('should reject a seven-field expression at definition', () => {
         expect(() => defineScheduledComponent({
             schedule: '0 0 0 * * * 2027',

@@ -40,8 +40,18 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
         throw new Error(`Invalid cron expression: ${options.schedule}`);
     }
 
+    if (evaluator.nextRun(new Date()) === null) {
+        // e.g. 31 February: the component would start and silently never run
+        throw new Error(`Cron expression has no future run: ${options.schedule}`);
+    }
+
     if (options.lock && !options.name) {
         throw new Error('A scheduled component with a lock requires a name');
+    }
+
+    if (options.lockTtlMs !== undefined && !(Number.isFinite(options.lockTtlMs) && options.lockTtlMs > 0)) {
+        // 0 or less would never hold a key, NaN is undefined behavior in the backend
+        throw new Error(`Invalid lockTtlMs: ${options.lockTtlMs}`);
     }
 
     const lock = options.lock ?
@@ -105,7 +115,7 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
         const from = Math.max(Date.now(), last);
         const next = evaluator.nextRun(new Date(from));
         if (!next) {
-            // the expression has no future run
+            // the expression ran out of future runs (checked at definition, so only defensive)
             timer = undefined;
             return;
         }
