@@ -19,8 +19,7 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
     if (options.timezone !== undefined) {
         try {
             // croner itself rejects an unknown zone only lazily, on the first nextRun()
-            // eslint-disable-next-line no-new
-            new Intl.DateTimeFormat('en-US', { timeZone: options.timezone });
+            Intl.DateTimeFormat('en-US', { timeZone: options.timezone });
         } catch {
             throw new Error(`Invalid timezone: ${options.timezone}`);
         }
