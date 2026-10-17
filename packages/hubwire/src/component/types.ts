@@ -90,9 +90,14 @@ export type ForwardedEvent<EventMap extends ComponentEventMap = ComponentEventMa
  */
 export type ScheduledComponentHooks = {
     /**
-     * A pass failed. start() still resolves; the next tick runs again.
+     * A pass failed, or the lock's acquire() rejected (the tick is skipped).
+     * start() still resolves; the next tick runs again.
      */
     onError?(error: unknown): void,
+    /**
+     * Another replica holds this tick's lock: the pass was skipped.
+     */
+    onSkip?(scheduledAt: Date): void,
 };
 
 /**
@@ -130,7 +135,7 @@ export type ScheduledComponentRunContext = {
     scheduledAt: Date,
 };
 
-export type ScheduledComponentOptions = {
+type ScheduledComponentBaseOptions = {
     /**
      * Cron expression with 5 or 6 fields (seconds first), evaluated by croner.
      */
@@ -145,8 +150,33 @@ export type ScheduledComponentOptions = {
      */
     timezone?: string,
     /**
-     * Run one pass in start() before scheduling. Default: true
+     * Run one pass in start() before scheduling. The start pass never takes the lock.
+     * Default: true without a lock, false with one.
      */
     runOnStart?: boolean,
     hooks?: ScheduledComponentHooks,
 };
+
+export type ScheduledComponentOptions = ScheduledComponentBaseOptions & (
+    {
+        name?: string,
+        lock?: undefined,
+        lockTtlMs?: undefined,
+    } |
+    {
+        /**
+         * Forms the lock key `${name}:${scheduledAt.toISOString()}`, shared by all replicas:
+         * unique per schedule among the processes sharing a lock.
+         */
+        name: string,
+        /**
+         * Elects one replica per tick: only the one that acquires the tick's key runs it.
+         */
+        lock: IScheduleLock,
+        /**
+         * How long a tick's key is held. Must exceed the clock skew between replicas
+         * plus how late a replica can fire. Default: 60_000
+         */
+        lockTtlMs?: number,
+    }
+);

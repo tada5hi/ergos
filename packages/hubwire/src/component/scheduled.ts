@@ -6,6 +6,8 @@ import type { IScheduledComponent, ScheduledComponentOptions } from './types';
 // below setTimeout's 2^31-1 ms limit and re-evaluates a slot croner answered in the past
 const RECHECK_MS = 30_000;
 
+const DEFAULT_LOCK_TTL_MS = 60_000;
+
 /**
  * A background job: one pass in start() (unless disabled), then one per cron
  * tick, never overlapping. A failing pass is reported to hooks.onError and never rejects —
@@ -38,6 +40,18 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
         throw new Error(`Invalid cron expression: ${options.schedule}`);
     }
 
+    if (options.lock && !options.name) {
+        throw new Error('A scheduled component with a lock requires a name');
+    }
+
+    const lock = options.lock ?
+        {
+            instance: options.lock,
+            name: options.name,
+            ttlMs: options.lockTtlMs ?? DEFAULT_LOCK_TTL_MS,
+        } :
+        undefined;
+
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduled = false;
     // bumped by every start() and stop(): a start() whose first pass was
@@ -51,7 +65,24 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
     // epoch ms of the last tick's slot (or of the moment scheduling began): the next slot lies after it
     let last = 0;
 
-    const run = async (scheduledAt: Date) => {
+    const run = async (scheduledAt: Date, locked: boolean) => {
+        if (locked && lock) {
+            let acquired: boolean;
+            try {
+                acquired = await lock.instance.acquire(`${lock.name}:${scheduledAt.toISOString()}`, lock.ttlMs);
+            } catch (e) {
+                // fail closed: the next tick tries again
+                invokeHook(options.hooks, 'onError', e);
+                return;
+            }
+
+            if (!acquired) {
+                invokeHook(options.hooks, 'onSkip', scheduledAt);
+                return;
+            }
+            // never released: the key is unique per tick, its TTL ends it
+        }
+
         runningSince = Date.now();
         try {
             await options.run({ scheduledAt });
@@ -63,9 +94,10 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
         }
     };
 
-    const execute = (scheduledAt: Date) => {
+    // the start pass is not locked: its scheduledAt differs per replica, a lock could not dedupe it
+    const execute = (scheduledAt: Date, locked: boolean) => {
         // cleared asynchronously: a run() that throws synchronously must not leave a settled pass behind
-        pass ??= run(scheduledAt).finally(() => { pass = undefined; });
+        pass ??= run(scheduledAt, locked).finally(() => { pass = undefined; });
         return pass;
     };
 
@@ -98,7 +130,7 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
             last = slot;
             // re-arm before the pass: a pass that stops its own component clears this timer
             arm();
-            void execute(new Date(slot));
+            void execute(new Date(slot), true);
         }, Math.min(slot - Date.now(), RECHECK_MS));
     }
 
@@ -109,8 +141,8 @@ export function defineScheduledComponent(options: ScheduledComponentOptions): IS
             }
 
             const current = ++generation;
-            if (options.runOnStart ?? true) {
-                await execute(new Date());
+            if (options.runOnStart ?? !lock) {
+                await execute(new Date(), false);
             }
 
             if (current !== generation) {
