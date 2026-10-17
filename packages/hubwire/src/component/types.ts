@@ -90,9 +90,15 @@ export type ForwardedEvent<EventMap extends ComponentEventMap = ComponentEventMa
  */
 export type ScheduledComponentHooks = {
     /**
-     * A pass failed. start() still resolves; the next tick runs again.
+     * A pass failed, or the lock's acquire() rejected (the tick is skipped).
+     * start() still resolves; the next tick runs again.
      */
     onError?(error: unknown): void,
+    /**
+     * Another replica holds this tick's lock, or the tick fired lockTtlMs or more
+     * late (after its key may have expired): the pass was skipped.
+     */
+    onSkip?(scheduledAt: Date): void,
 };
 
 /**
@@ -107,15 +113,71 @@ export interface IScheduledComponent extends IComponent {
     settled(): Promise<void>;
 }
 
-export type ScheduledComponentOptions = {
+/**
+ * Elects one replica per tick. Every implementation keeps this contract:
+ * the first caller for a key wins, atomically across callers and replicas;
+ * the key stays held until `ttlMs` elapsed (free at exactly acquiredAt + ttlMs) and is never
+ * released: the key is unique per tick, and a release would let a replica that fires
+ * the same tick late win it again. A rejected `acquire` counts as not acquired:
+ * the tick is skipped and the error reported.
+ */
+export interface IScheduleLock {
     /**
-     * node-cron expression
+     * true when this caller won `key` for `ttlMs`; false while another holds it.
+     */
+    acquire(key: string, ttlMs: number): Promise<boolean>;
+}
+
+export type ScheduledComponentRunContext = {
+    /**
+     * The planned fire time of the tick (ms 0), also when its timer fires late;
+     * for the start pass, the time start() ran it.
+     */
+    scheduledAt: Date,
+};
+
+type ScheduledComponentBaseOptions = {
+    /**
+     * Cron expression with 5 or 6 fields (seconds first), evaluated by croner.
      */
     schedule: string,
-    run: () => Promise<void>,
     /**
-     * Run one pass in start() before scheduling. Default: true
+     * One pass. Receives the tick's planned fire time.
+     */
+    run: (context: ScheduledComponentRunContext) => Promise<void>,
+    /**
+     * IANA zone the expression is evaluated in, e.g. 'Europe/Berlin'.
+     * Default: the process's local zone.
+     */
+    timezone?: string,
+    /**
+     * Run one pass in start() before scheduling. The start pass never takes the lock.
+     * Default: true without a lock, false with one.
      */
     runOnStart?: boolean,
     hooks?: ScheduledComponentHooks,
 };
+
+export type ScheduledComponentOptions = ScheduledComponentBaseOptions & (
+    {
+        name?: string,
+        lock?: undefined,
+        lockTtlMs?: undefined,
+    } |
+    {
+        /**
+         * Forms the lock key `${name}:${scheduledAt.toISOString()}`, shared by all replicas:
+         * unique per schedule among the processes sharing a lock.
+         */
+        name: string,
+        /**
+         * Elects one replica per tick: only the one that acquires the tick's key runs it.
+         */
+        lock: IScheduleLock,
+        /**
+         * How long a tick's key is held. Must exceed the clock skew between replicas
+         * plus how late a replica can fire. Default: 60_000
+         */
+        lockTtlMs?: number,
+    }
+);

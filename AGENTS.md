@@ -9,13 +9,13 @@ An npm workspaces monorepo with three packages:
   (`defineScheduledComponent`), and the message bus that routes commands and replies between
   components (`IMessageBus` / `MessageBus`, `IMessageBusDriver`, `MemoryMessageBusDriver`,
   `IDispatcher` / `LocalDispatcher` / `RemoteDispatcher`, `RemoteWorker`). One runtime dependency
-  (`node-cron`).
+  (`croner`).
 - **`@hubwire/amqp`** (`packages/amqp`) — `AmqpMessageBusDriver` over
   [amqp-extension](https://www.npmjs.com/package/amqp-extension) (a real dependency);
   `hubwire` is a peer.
 - **`@hubwire/test`** (`packages/test`) — test kit for consumers and driver authors:
   `defineDriverConformance` (the driver contract as test-framework-agnostic cases on `node:assert`;
-  callers pass vitest's / jest's / node:test's `describe` / `it`), `FakeMessageBus`, `drain()`.
+  callers pass vitest's / jest's / node:test's `describe` / `it`), `FakeMessageBus`, `MemoryScheduleLock`, `drain()`.
   `hubwire` is a peer + dev dependency.
 
 Consumers: FLAME Hub and authup. ESM-only. Observability is through typed `hooks` options,

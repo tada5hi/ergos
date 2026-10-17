@@ -27,7 +27,7 @@ The per-package `test` scripts pass `--run`, so they never enter watch mode — 
 
 `test/unit/` holds the only test layer, one spec per module — hubwire: `component`, `scheduled`,
 `hook`, `message-bus`, `memory-driver`, `local-dispatcher`, `remote-dispatcher`, `remote-worker`;
-@hubwire/amqp: `driver`; @hubwire/test: `memory`. Specs import the package under test from its
+@hubwire/amqp: `driver`; @hubwire/test: `memory`, `memory-schedule-lock`. Specs import the package under test from its
 **source** barrel (`'../../src'`), not from `dist/`; other packages (`hubwire`, `@hubwire/test`)
 are imported by name (aliased to source).
 
@@ -49,7 +49,11 @@ are imported by name (aliased to source).
 - Every hook has a spec that it fires, and each hook site has one that a throwing hook leaves
   the outcome unchanged (resolve vs. reject, ack vs. retry).
 - Concurrency is pinned with `Promise.withResolvers()` deferreds where possible.
-  `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
+  `scheduled.spec.ts`: the older cases use real seconds schedules and wait ~1s each; time-dependent cases use `vi.useFakeTimers({ now })` + `vi.advanceTimersByTimeAsync()` (they drive the timer loop and `Date`), and timer leaks are counted with `vi.getTimerCount()`. Results must not depend on the host zone: a
+  "fires in the given zone" case uses a zone that is neither UTC nor the developer's (`Asia/Tokyo`,
+  `America/New_York`), and the spec is also run with `TZ=UTC` (CI's zone) before committing:
+  `TZ=UTC npx vitest --config test/vitest.config.ts --run test/unit/scheduled.spec.ts`. Fake timers
+  may cross a fall-back hour (the timer loop never reads local time).
 - `driver.spec.ts` (@hubwire/amqp) runs against `FakeAmqpClient` (no broker) and compares every routing
   shape with `fixtures/hub-wire.ts`, captured from hub's former driver. The only allowed
   difference is the retry counter (body `metadata.attempt` → `x-attempt` header, reported to the
