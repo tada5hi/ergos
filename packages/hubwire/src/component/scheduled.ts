@@ -14,11 +14,25 @@ const RECHECK_MS = 30_000;
  * A pass must never await its own component's settled() — it would deadlock.
  */
 export function defineScheduledComponent(options: ScheduledComponentOptions): IScheduledComponent {
+    if (options.timezone !== undefined) {
+        try {
+            // croner itself rejects an unknown zone only lazily, on the first nextRun()
+            // eslint-disable-next-line no-new
+            new Intl.DateTimeFormat('en-US', { timeZone: options.timezone });
+        } catch {
+            throw new Error(`Invalid timezone: ${options.timezone}`);
+        }
+    }
+
     // croner only evaluates the expression: it is never given a callback, so it arms no timer.
     // The loop below waits for each slot itself, so a pass knows the slot it runs for.
     let evaluator: Cron;
     try {
-        evaluator = new Cron(options.schedule, { mode: '5-or-6-parts', paused: true });
+        evaluator = new Cron(options.schedule, {
+            mode: '5-or-6-parts',
+            paused: true,
+            timezone: options.timezone,
+        });
     } catch {
         // fail at definition, not after a full pass in start()
         throw new Error(`Invalid cron expression: ${options.schedule}`);

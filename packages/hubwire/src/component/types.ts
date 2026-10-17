@@ -125,6 +125,11 @@ export type ScheduledComponentOptions = {
      */
     run: (context: ScheduledComponentRunContext) => Promise<void>,
     /**
+     * IANA zone the expression is evaluated in, e.g. 'Europe/Berlin'.
+     * Default: the process's local zone.
+     */
+    timezone?: string,
+    /**
      * Run one pass in start() before scheduling. Default: true
      */
     runOnStart?: boolean,

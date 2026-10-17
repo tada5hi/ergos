@@ -269,6 +269,93 @@ describe('src/component/scheduled', () => {
             await c.stop();
             expect(passes).toBe(1);
         });
+
+        describe('timezone', () => {
+            const collect = (seen: string[]) => async ({ scheduledAt }: { scheduledAt: Date }) => {
+                seen.push(scheduledAt.toISOString());
+            };
+
+            it('should fire in the given timezone', async () => {
+                vi.useFakeTimers({ now: new Date('2026-01-14T16:59:59.500Z') });
+                const seen: string[] = [];
+                const c = defineScheduledComponent({
+                    schedule: '0 2 * * *',
+                    timezone: 'Asia/Tokyo', // UTC+9, no DST: 02:00 JST is 17:00Z the day before
+                    runOnStart: false,
+                    run: collect(seen),
+                });
+                await c.start();
+                await vi.advanceTimersByTimeAsync(1000);
+                await c.stop();
+                expect(seen).toEqual(['2026-01-14T17:00:00.000Z']);
+            });
+
+            it('should run a local time the spring-forward change skips one hour later', async () => {
+                vi.useFakeTimers({ now: new Date('2026-03-29T00:00:00.500Z') });
+                const seen: string[] = [];
+                const c = defineScheduledComponent({
+                    schedule: '30 2 * * *',
+                    timezone: 'Europe/Berlin', // 02:30 does not exist on 2026-03-29
+                    runOnStart: false,
+                    run: collect(seen),
+                });
+                await c.start();
+                await vi.advanceTimersByTimeAsync(48 * 60 * 60 * 1000);
+                await c.stop();
+                expect(seen).toEqual([
+                    '2026-03-29T01:30:00.000Z', // 03:30 CEST
+                    '2026-03-30T00:30:00.000Z', // 02:30 CEST
+                ]);
+            });
+
+            it('should run the repeated hour of a fall-back change once', async () => {
+                vi.useFakeTimers({ now: new Date('2026-10-25T00:40:00.500Z') });
+                const seen: string[] = [];
+                const c = defineScheduledComponent({
+                    schedule: '*/15 * * * *',
+                    timezone: 'Europe/Berlin',
+                    runOnStart: false,
+                    run: collect(seen),
+                });
+                await c.start();
+                await vi.advanceTimersByTimeAsync(100 * 60 * 1000);
+                await c.stop();
+                expect(seen).toEqual([
+                    '2026-10-25T00:45:00.000Z', // 02:45 CEST
+                    '2026-10-25T02:00:00.000Z', // 03:00 CET: the second 02:xx hour is skipped
+                    '2026-10-25T02:15:00.000Z',
+                ]);
+            });
+
+            it('should wait out a repeated hour it was started in, without spinning', async () => {
+                // 01:10 EST, the second occurrence of 01:xx: croner answers nextRun() with a past instant here
+                vi.useFakeTimers({ now: new Date('2026-11-01T06:10:00.500Z') });
+                const seen: string[] = [];
+                const c = defineScheduledComponent({
+                    schedule: '*/15 * * * *',
+                    timezone: 'America/New_York',
+                    runOnStart: false,
+                    run: collect(seen),
+                });
+                await c.start();
+                await vi.advanceTimersByTimeAsync(100);
+                expect(seen).toEqual([]);
+                expect(vi.getTimerCount()).toBeLessThanOrEqual(1);
+                await vi.advanceTimersByTimeAsync(55 * 60 * 1000);
+                await c.stop();
+                expect(seen).toEqual(['2026-11-01T07:00:00.000Z']); // 02:00 EST
+            });
+        });
+    });
+
+    it('should reject an invalid timezone at definition, before any pass', () => {
+        let passes = 0;
+        expect(() => defineScheduledComponent({
+            schedule: '* * * * *',
+            timezone: 'Mars/Olympus',
+            run: async () => { passes++; },
+        })).toThrow('Mars/Olympus');
+        expect(passes).toBe(0);
     });
 
     it('should reject a seven-field expression at definition', () => {
