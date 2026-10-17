@@ -617,7 +617,7 @@ describe('src/component/scheduled', () => {
     });
 
     it('should reject a lockTtlMs that is not a positive finite number', () => {
-        for (const lockTtlMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        for (const lockTtlMs of [0, -1, NaN, Infinity]) {
             expect(() => defineScheduledComponent({
                 name: 'cleanup',
                 schedule: '* * * * *',
