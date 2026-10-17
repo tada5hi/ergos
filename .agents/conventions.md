@@ -23,7 +23,7 @@ The three `@tada5hi/*` config packages are the source of truth for style, TS, an
 - `npm run lint:fix` auto-fixes most style violations — run it before hand-editing formatting.
 - Never edit `dist/` — it is generated and git-ignored.
 - Never hand-edit `.release-please-manifest.json` or the versions in `packages/*/package.json`; release-please owns them.
-- `node-cron` is the only runtime dependency of `hubwire`; it must never depend on amqp-extension. Transport-specific code goes in its own package (`@hubwire/amqp`), which takes its transport as a real dependency and `hubwire` as a peer + dev dependency at the workspace version. Shared tooling belongs in the root `devDependencies`.
+- `croner` is the only runtime dependency of `hubwire`; it must never depend on amqp-extension. Transport-specific code goes in its own package (`@hubwire/amqp`), which takes its transport as a real dependency and `hubwire` as a peer + dev dependency at the workspace version. Shared tooling belongs in the root `devDependencies`.
 - Regenerate `package-lock.json` with a plain `npm install` — never `--package-lock-only` (drops other platforms' optional dependencies) or `--force`.
 - Contracts carry an `I` prefix and live in `types.ts`; classes `implements` them, and dependents take the contract (`IMessageBus`), not the class. No `as any`; a cast only where nothing can check the type (`fromMessage` in `dispatcher/wire.ts`, the wire boundary).
 - No logger: observable events are optional typed hooks on a `hooks` option (`on*`), declared in `types.ts` and called through `invokeHook`, which ignores a hook that throws or rejects. A hook must never change an outcome (ack vs. retry, resolve vs. reject).

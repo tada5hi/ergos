@@ -107,12 +107,23 @@ export interface IScheduledComponent extends IComponent {
     settled(): Promise<void>;
 }
 
+export type ScheduledComponentRunContext = {
+    /**
+     * The planned fire time of the tick (ms 0), also when its timer fires late;
+     * for the start pass, the time start() ran it.
+     */
+    scheduledAt: Date,
+};
+
 export type ScheduledComponentOptions = {
     /**
-     * node-cron expression
+     * Cron expression with 5 or 6 fields (seconds first), evaluated by croner.
      */
     schedule: string,
-    run: () => Promise<void>,
+    /**
+     * One pass. Receives the tick's planned fire time.
+     */
+    run: (context: ScheduledComponentRunContext) => Promise<void>,
     /**
      * Run one pass in start() before scheduling. Default: true
      */

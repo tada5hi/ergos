@@ -1,5 +1,10 @@
-import cron from 'node-cron';
-import { describe, expect, it } from 'vitest';
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest';
 import { defineScheduledComponent } from '../../src';
 
 const wait = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -104,26 +109,6 @@ describe('src/component/scheduled', () => {
         expect(passes).toBe(0);
     });
 
-    it('should settle and stay unscheduled when a pass stops its own component', async () => {
-        const baseline = cron.getTasks().size;
-        const awaited = defineScheduledComponent({
-            schedule: '0 0 1 1 *',
-            run: async () => {
-                await Promise.resolve();
-                await awaited.stop();
-            },
-        });
-        const fired = defineScheduledComponent({
-            schedule: '0 0 1 1 *',
-            run: async () => { void fired.stop(); },
-        });
-
-        await awaited.start();
-        await fired.start();
-
-        expect(cron.getTasks().size).toBe(baseline);
-    });
-
     it('should let settled() wait for the first pass in flight after stop()', async () => {
         const gate = Promise.withResolvers<void>();
         let done = false;
@@ -184,14 +169,112 @@ describe('src/component/scheduled', () => {
         expect(c.status().lastSuccessAt).toBeTypeOf('number');
     });
 
-    it('should not leave a cron task behind after stop', async () => {
-        const baseline = cron.getTasks().size;
-        const c = defineScheduledComponent({ schedule: '0 0 1 1 *', run: async () => {} });
-        await c.start();
-        expect(cron.getTasks().size).toBe(baseline + 1);
-        await c.stop();
-        await c.start();
-        await c.stop();
-        expect(cron.getTasks().size).toBe(baseline);
+    describe('with fake timers', () => {
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        it('should settle and stay unscheduled when a pass stops its own component', async () => {
+            vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00.000Z') });
+            const baseline = vi.getTimerCount();
+            const awaited = defineScheduledComponent({
+                schedule: '0 0 1 1 *',
+                run: async () => {
+                    await Promise.resolve();
+                    await awaited.stop();
+                },
+            });
+            const fired = defineScheduledComponent({
+                schedule: '0 0 1 1 *',
+                run: async () => { void fired.stop(); },
+            });
+
+            await awaited.start();
+            await fired.start();
+
+            expect(vi.getTimerCount()).toBe(baseline);
+        });
+
+        it('should not leave a timer behind after stop', async () => {
+            vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00.000Z') });
+            const baseline = vi.getTimerCount();
+            const c = defineScheduledComponent({ schedule: '0 0 1 1 *', run: async () => {} });
+            await c.start();
+            expect(vi.getTimerCount()).toBe(baseline + 1);
+            await c.stop();
+            await c.start();
+            await c.stop();
+            expect(vi.getTimerCount()).toBe(baseline);
+        });
+
+        it('should pass the start time as scheduledAt to the start pass', async () => {
+            vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00.250Z') });
+            const seen: string[] = [];
+            const c = defineScheduledComponent({
+                schedule: '0 0 1 1 *',
+                run: async ({ scheduledAt }) => { seen.push(scheduledAt.toISOString()); },
+            });
+            await c.start();
+            await c.stop();
+            expect(seen).toEqual(['2026-01-15T10:00:00.250Z']);
+        });
+
+        it('should pass each tick\'s planned fire time as scheduledAt', async () => {
+            vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00.500Z') });
+            const seen: string[] = [];
+            const c = defineScheduledComponent({
+                schedule: '* * * * * *',
+                runOnStart: false,
+                run: async ({ scheduledAt }) => { seen.push(scheduledAt.toISOString()); },
+            });
+            await c.start();
+            await vi.advanceTimersByTimeAsync(3000);
+            await c.stop();
+            expect(seen).toEqual([
+                '2026-01-15T10:00:01.000Z',
+                '2026-01-15T10:00:02.000Z',
+                '2026-01-15T10:00:03.000Z',
+            ]);
+        });
+
+        it('should pass the planned slot when the timer fires late', async () => {
+            vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00.500Z') });
+            const seen: string[] = [];
+            const c = defineScheduledComponent({
+                schedule: '* * * * * *',
+                runOnStart: false,
+                run: async ({ scheduledAt }) => { seen.push(`${scheduledAt.toISOString()}@${new Date().toISOString()}`); },
+            });
+            await c.start();
+            await vi.advanceTimersByTimeAsync(400);
+            // the clock moves, the timer keeps its delay: it fires at 10:00:01.003
+            vi.setSystemTime(Date.now() + 3);
+            await vi.advanceTimersByTimeAsync(100);
+            await c.stop();
+            expect(seen).toEqual(['2026-01-15T10:00:01.000Z@2026-01-15T10:00:01.003Z']);
+        });
+
+        it('should wait for a slot further away than one timer can', async () => {
+            vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00.000Z') });
+            let passes = 0;
+            const c = defineScheduledComponent({
+                schedule: '0 0 1 3 *', // 1 March, ~45 days: above setTimeout's 2^31-1 ms
+                runOnStart: false,
+                run: async () => { passes++; },
+            });
+            await c.start();
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(passes).toBe(0);
+            await vi.advanceTimersByTimeAsync(50 * 24 * 60 * 60 * 1000);
+            await c.stop();
+            expect(passes).toBe(1);
+        });
+    });
+
+    it('should reject a seven-field expression at definition', () => {
+        expect(() => defineScheduledComponent({
+            schedule: '0 0 0 * * * 2027',
+            run: async () => {},
+        })).toThrow('0 0 0 * * * 2027');
     });
 });

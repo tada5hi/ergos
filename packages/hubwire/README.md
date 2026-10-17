@@ -81,7 +81,7 @@ npm install hubwire --save
 ```
 
 The package is ESM-only and requires Node.js `>=22`. Its only runtime dependency is
-[node-cron](https://www.npmjs.com/package/node-cron), for scheduled components.
+[croner](https://www.npmjs.com/package/croner), for scheduled components.
 
 ## Components
 
@@ -179,7 +179,7 @@ await Promise.all(components.map((component) => component.settled?.()));
 import { defineScheduledComponent } from 'hubwire';
 
 const cleaner = defineScheduledComponent({
-    schedule: '*/5 * * * *', // node-cron: every five minutes
+    schedule: '*/5 * * * *', // every five minutes
     run: () => sessions.deleteExpired(new Date()),
     hooks: {
         onError: (error) => logger.warn('session cleanup failed', error),
@@ -514,7 +514,7 @@ turn an ack into a retry or reject a `publish()`. Your own extensions can follow
 | Export | Kind | Purpose |
 |---|---|---|
 | `Component` | class | `mount()`, `unmount()`, `handle()`, `initialize()`, `start()`, `stop()`, `status()` |
-| `defineScheduledComponent` | function | A node-cron job as an `IScheduledComponent` (an `IComponent` with `settled()`) |
+| `defineScheduledComponent` | function | A cron job as an `IScheduledComponent` (an `IComponent` with `settled()`) |
 | `IComponent`, `ComponentStatus`, `ComponentEventMap`, `ComponentMetadata`, `ComponentHandler`, `ComponentHandlerFn`, `ComponentHandlerContext`, `ComponentHandleOptions` | type | The component contract and handler types |
 | `ICallable`, `ForwardedEvent` | type | A component with a `handle()`, and one forwarded event |
 | `IScheduledComponent`, `ScheduledComponentOptions` | type | A scheduled component, and its options |

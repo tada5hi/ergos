@@ -49,7 +49,7 @@ are imported by name (aliased to source).
 - Every hook has a spec that it fires, and each hook site has one that a throwing hook leaves
   the outcome unchanged (resolve vs. reject, ack vs. retry).
 - Concurrency is pinned with `Promise.withResolvers()` deferreds where possible.
-  `scheduled.spec.ts` uses real node-cron seconds schedules and waits ~1s per case.
+  `scheduled.spec.ts`: the older cases use real seconds schedules and wait ~1s each; time-dependent cases use `vi.useFakeTimers({ now })` + `vi.advanceTimersByTimeAsync()` (they drive the timer loop and `Date`), and timer leaks are counted with `vi.getTimerCount()`.
 - `driver.spec.ts` (@hubwire/amqp) runs against `FakeAmqpClient` (no broker) and compares every routing
   shape with `fixtures/hub-wire.ts`, captured from hub's former driver. The only allowed
   difference is the retry counter (body `metadata.attempt` → `x-attempt` header, reported to the
