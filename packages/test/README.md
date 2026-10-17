@@ -70,9 +70,11 @@ messageBus.published[0].type; // 'build'
 Two replicas of one scheduled component, sharing a lock:
 
 ```typescript
+import { vi } from 'vitest';
 import { defineScheduledComponent } from 'hubwire';
 import { MemoryScheduleLock } from '@hubwire/test';
 
+vi.useFakeTimers();
 const lock = new MemoryScheduleLock();
 const define = () => defineScheduledComponent({ name: 'cleanup', schedule: '* * * * * *', lock, run: async () => {} });
 await Promise.all([define().start(), define().start()]);
