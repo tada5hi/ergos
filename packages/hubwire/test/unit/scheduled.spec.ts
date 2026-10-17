@@ -257,18 +257,22 @@ describe('src/component/scheduled', () => {
 
         it('should wait for a slot further away than one timer can', async () => {
             vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00.000Z') });
-            let passes = 0;
+            const seen: string[] = [];
             const c = defineScheduledComponent({
                 schedule: '0 0 1 3 *', // 1 March, ~45 days: above setTimeout's 2^31-1 ms
+                timezone: 'UTC',
                 runOnStart: false,
-                run: async () => { passes++; },
+                run: async ({ scheduledAt }) => { seen.push(scheduledAt.toISOString()); },
             });
             await c.start();
+            // one uncapped timer would be clamped to 1 ms and fire now
             await vi.advanceTimersByTimeAsync(1000);
-            expect(passes).toBe(0);
-            await vi.advanceTimersByTimeAsync(50 * 24 * 60 * 60 * 1000);
+            expect(seen).toEqual([]);
+            // jump to just before the slot instead of walking 45 days of capped waits
+            vi.setSystemTime(new Date('2026-03-01T00:00:00Z').getTime() - 1000);
+            await vi.advanceTimersByTimeAsync(30_001);
             await c.stop();
-            expect(passes).toBe(1);
+            expect(seen).toEqual(['2026-03-01T00:00:00.000Z']);
         });
 
         describe('lock', () => {
