@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.2](https://github.com/tada5hi/hubwire/compare/test-v0.1.1...test-v0.1.2) (2026-10-17)
+
+
+### Features
+
+* lock, timezone and scheduledAt for scheduled components ([#24](https://github.com/tada5hi/hubwire/issues/24)) ([a492e76](https://github.com/tada5hi/hubwire/commit/a492e76034b77d43ac0f8db5d461c69b62a8f7ec))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * hubwire bumped from ^0.2.1 to ^0.2.2
+  * peerDependencies
+    * hubwire bumped from ^0.2.1 to ^0.2.2
+
 ## [0.1.1](https://github.com/tada5hi/hubwire/compare/test-v0.1.0...test-v0.1.1) (2026-10-16)
 
 
