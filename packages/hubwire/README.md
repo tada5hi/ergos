@@ -254,12 +254,12 @@ const report = defineScheduledComponent({
 `timezone` is an IANA zone (`'Europe/Berlin'`). It is validated when the component is defined and
 defaults to the process's zone. The process zone does not matter once `timezone` is set.
 
-- A local time a spring-forward change skips runs one hour later, once: `30 2 * * *` in
-  `Europe/Berlin` runs at 03:30 CEST on 2026-03-29, and at 02:30 again the next day. This holds
-  only when the pattern does not already run in that later hour; otherwise the skipped slot is
-  dropped (`0,30 2 * * *` runs at 03:00 CEST on 2026-03-29 and skips 02:30).
-- On a fall-back day the repeated hour runs once: `*/15 * * * *` in `Europe/Berlin` runs 02:45 CEST,
-  then 03:00 CET, skipping the second 02:xx hour, and `0 2 * * *` runs at the first 02:00.
+- Fixed-time jobs (a single value in seconds, minutes and hours) skipped by spring-forward
+  run at the first valid time after the gap: `30 2 * * *` in `Europe/Berlin` runs at
+  03:00 CEST on 2026-03-29, and at 02:30 again the next day.
+- On a fall-back day fixed-time jobs run at the first occurrence only. Interval jobs such as
+  `*/15 * * * *` run through both occurrences of the repeated hour. Interval jobs skip
+  nonexistent times during spring-forward. These are Croner 11's Vixie cron semantics.
 - Use `timezone: 'UTC'` for a fixed interval through every DST change.
 
 ## Message bus
